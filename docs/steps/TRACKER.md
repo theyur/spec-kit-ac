@@ -16,7 +16,7 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
 |---|------|--------|------|------|----------|--------|
 | 0 | Repo bootstrap: `pyproject.toml` (uv, console script `speckit-ac`), `src/speckit_ac/` layout with `payload/` = the extension, pytest setup, README skeleton, generic `docs/WORKFLOW.md` (from CT doc §0–2, §8) | done | [00-bootstrap.spec.md](00-bootstrap.spec.md) | [plan](../../.claude/plans/00-bootstrap.plan.md) (critic: REVISE → APPROVE, 2 rounds) | 2026-11-07: S00-A01–A09 pass (10 tests; wheel ships `payload/README.md`; no `Requires-Dist`; `uvx --isolated` prints version; `payload_dir()` resolves from a non-editable wheel). Python 3.11 floor not run (see notes) | |
 | 1 | Platform spike (gate): throwaway `specify init` project + one-command test extension; verify the DESIGN §10 risks. Stop and decide with the user if anything fails | done | [01-platform-spike.spec.md](01-platform-spike.spec.md) · [results](01-platform-spike.results.md) | [plan](../../.claude/plans/01-platform-spike.plan.md) (critic: REVISE → REVISE → APPROVE, 3 rounds) | 2026-11-07: spike run (11 headless runs, $0.037). Risk 1 FAIL (flag dropped; patch and guard-deny both work), risk 2 PASS, risk 3 PASS, risk 4 PARTIAL (no hand-back tool seen headless). New: N1 skills symlinked by `--dev`, N2 spec-kit scripts need PATH Python once an extension is installed. pytest 10 pass; no `src/`/`tests/` change | |
-| 2 | Port and adapt runtime: `guard.py` + all scripts from CT to the per-feature model (DESIGN §3, §8); `test_guard.py` → pytest with CT cases + per-feature / cross-feature cases | todo | | | | |
+| 2 | Port and adapt runtime: `guard.py` + all scripts from CT to the per-feature model (DESIGN §3, §8); `test_guard.py` → pytest with CT cases + per-feature / cross-feature cases | done | [02-runtime-port.spec.md](02-runtime-port.spec.md) · [CONFIG.md](../CONFIG.md) | [plan](../../.claude/plans/02-runtime-port.plan.md) (critic: REVISE → REVISE → REVISE, 3 rounds, no BLOCKER; all findings dispositioned) | 2026-11-07: 288 tests pass (CPython 3.14 and 3.11.15): every CT guard case ported + per-/cross-feature, marker, config-state, root-fallback cases; script tests incl. spec drift exit 3, ignored-folder breaches, `.feature` write rules. Payload grep: no CT strings. Mutation spot-check: dropping the `is_file` or timestamp-numbering rule fails tests. Not run: `export_refs.py` against .NET (step 7), live hooks (steps 7–8) | |
 | 3 | Agents: translator (feature tag, one feature), writer (`[Scope]`, `Support/Shared`, cross-feature compile fixes, runner/framework aware), judge (`SUPERSEDED`) | todo | | | | |
 | 4 | Commands: `translate` (two phases), `tests-write`, `tests-analyze` (all / `--current`), `critic` (port + `ac`, `features` stages); `extension.yml` with optional hooks | todo | | | | |
 | 5 | `/speckit-ac-init`: detection, questions, AC project scaffolding per framework/runner, config, automatable verification (CT doc §6 items 1, 3–7), smoke-test instructions | todo | | | | |
@@ -50,3 +50,19 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
   the symlinked skills, `doctor`/`upgrade` re-check (step 6); init/doctor check the v1.0 environment
   (steps 5/6); interactive smoke test re-confirms the headless results (steps 7–8). DESIGN.md unchanged until agreed. Spike files remain only in the session scratchpad;
   N3 lists the user-level files Claude Code wrote.
+- Step 2 (2026-11-07): decisions 1–8 approved with the spec (DESIGN §8 + decision log). Spec amended
+  during plan review: R10/R11 (translator writes only `.feature`, writer never `.feature`), R16
+  (tightened build-folder skip). Reqnroll 2.4.1/3.1.2 compile `**\*.feature`, hence the `.feature`
+  rules for every role. Open items:
+  - **Step 4:** commands call scripts by the cwd-relative path (CONFIG.md "Invoking the scripts");
+    decide the marker's lifecycle (it stays after a subagent until the next run script); spec drift =
+    `ac_lock.py verify sources` exit 3 → ask, `confirm-spec`; snapshot order per CONFIG.md.
+  - **Step 5:** init writes `.workflow/config.json` schema 1 (CONFIG.md); spec inputs must not include
+    implementation folders (`src/`); the guard only rejects overlaps with `specs/`, `.specify/`,
+    `.workflow/`, the AC project and `refsDir`.
+  - **Step 7:** confirm the TRX `className` carries the `F00N` namespace segment (assumption A2;
+    `summarize_trx.py` falls back to scenario names); run `export_refs.py` for real.
+  - v1.0 accepts only `specs/NNN-name` feature folders (timestamp/custom folders rejected); listed with
+    the deferred portability issues in the user-level memory.
+  - Possible follow-up: guard denial for main-agent writes to `.specify/extensions/ac/**` (now a known
+    limit in WORKFLOW §6).

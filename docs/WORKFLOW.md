@@ -102,24 +102,33 @@ Paths: `<ac>` = the AC project folder (outside the solution file), `F00N` = the 
 
 | Artifact | Main agent | ac-feature-translator | ac-test-writer | ac-test-fail-judge |
 |---|---|---|---|---|
-| Spec inputs (§2) | read/write (spec steps) | read | read | read |
-| `specs/NNN-x/acceptance.md`, `<ac>/Samples/F00N/**` | read/write until `sources` locked, then read | read | read | read |
-| `<ac>/Features/F00N/*.feature` | read only (guard) | read/write, current feature only, until `features` locked | read | read |
-| `specs/NNN-x/ac/*.lock` | written only by the lock script | no | no | no |
-| AC project files (`*.csproj`, `reqnroll.json`, `Directory.Build.props`) | read/write | no | read | read |
-| `<ac>/StepDefinitions/**`, `<ac>/Support/**` | **no** (guard) | **no** | read/write (see §4) | read |
+| `specs/NNN-x/spec.md`, constitution, configured spec inputs (§2) | read/write (spec steps) | read (current feature's spec only) | read (current feature's spec only) | read (every feature's spec) |
+| `specs/NNN-x/acceptance.md` | read/write until `sources` locked, then read | read (current feature) | read (current feature) | read (every feature) |
+| `<ac>/Samples/F00N/**` | read/write until that feature's `sources` locked, then read | read (current feature) | read | read |
+| `<ac>/Features/F00N/*.feature` | read only (guard; no `.feature` anywhere in `<ac>`) | read/write `.feature` files only, current feature only, until `features` locked | read | read |
+| `specs/NNN-x/ac/*.lock` | written only by the lock script (guard) | no | no | no |
+| AC project files directly in `<ac>/` (`*.csproj`, `reqnroll.json`, `Directory.Build.props`) | read/write | no | read | read |
+| `<ac>/StepDefinitions/**`, `<ac>/Support/**` | **no** (guard) | **no** | read/write, never a `.feature` (see §4) | read |
+| `<ac>/bin/`, `<ac>/obj/` (build output) | read/write | **no** | **no** | **no** |
 | Implementation source | read/write | **no** | **no** | **no** |
 | Unit test project(s) | read/write | **no** | **no** | **no** |
-| Reference assemblies + API listings (`<refsDir>/**`, default `artifacts/refs/`; made by script) | read | no | read | read |
-| `runs/translate-NNN/translation-report.md` | read | read/write | no | no |
-| `runs/run-NNN/input-feedback.md` | read | no | read | no |
-| `runs/run-NNN/writer-report.md` | read | no | read/write | read |
+| Reference assemblies + API listings (`<refsDir>/**`, default `artifacts/refs/`; made by script) | read (guard blocks writes) | no | read | read |
+| `runs/translate-NNN/translation-report.md` | read (guard blocks writes to `runs/`) | read/write (active run only) | no | no |
+| `runs/run-NNN/input-feedback.md` | read | no | read (active run) | no |
+| `runs/run-NNN/writer-report.md` | read | no | read/write (active run) | read (active run) |
 | `runs/run-NNN/analyze-K/ac-results.trx` (raw) | read | **no** | **no** | **no** |
-| `runs/run-NNN/analyze-K/ac-results.md` (cleaned) | read | **no** | **no** | read |
-| `runs/run-NNN/analyze-K/judge-report.md` | read | no | no | write |
+| `runs/run-NNN/analyze-K/ac-results.md` (cleaned) | read | **no** | **no** | read (active analyze) |
+| `runs/run-NNN/analyze-K/judge-report.md` | read | no | no | write (active analyze, `Write` only) |
+| `.workflow/active-run.json` | read (written only by the run scripts; guard) | no | no | no |
+| `.workflow/config.json` | read/write (`/speckit-ac-init`) | no | no | no |
 | Everything else in the repo | read/write | **no** | **no** | **no** |
 | Bash | yes | **only one exact command**: the reference-mode build of the AC project | same | **none** |
-| Web, MCP, Skill, Agent tools | as usual | **none** | **none** | **none** |
+| Skill | as usual, except `/speckit-ac-*` (started only by the user; guard) | **none** | **none** | **none** |
+| Web, MCP, Agent tools | as usual | **none** | **none** | **none** |
+
+"Current feature", "active run" and "active analyze" come from `.workflow/active-run.json`, which the
+run scripts write right before each subagent starts ([CONFIG.md](CONFIG.md)). An AC subagent without
+a matching marker is denied every call.
 
 ### 3.2 Principles
 
@@ -149,7 +158,14 @@ Paths: `<ac>` = the AC project folder (outside the solution file), `F00N` = the 
    exit codes do not block. If the guard **cannot be launched** (interpreter missing, timeout), the
    hook entry's `"onFailure": "block"` blocks the call (Claude Code support to be verified in step 1).
    The guard runs with the Python command stored in `.workflow/config.json`, never from the
-   `speckit-ac` tool's own environment.
+   `speckit-ac` tool's own environment. A broken config blocks every call; a **missing** config (the
+   extension is installed but `/speckit-ac-init` has not run) lets the main agent work and blocks the
+   AC subagents.
+9. **Every subagent works on one active run.** The run scripts record the feature, run and role in
+   `.workflow/active-run.json` right before a subagent starts; the guard pins all of that role's paths
+   to it and denies the role when the marker is missing, for another role or malformed.
+10. **The main agent never starts `/speckit-ac-*` itself.** The deploy step marks those skills
+    human-only and the guard blocks a main-agent `Skill` call for them; users type the command.
 
 ## 4. Multi-feature model
 
@@ -176,15 +192,24 @@ Paths: `<ac>` = the AC project folder (outside the solution file), `F00N` = the 
 
 - `sources` = `acceptance.md` + the feature's golden samples, plus the recorded hash of `spec.md`.
 - `features` = the feature's `.feature` files.
-- Locks are content hashes written and checked by a script. Later steps stop when a locked file
-  changed; the user unlocks, edits and re-locks explicitly.
+- Locks are content hashes written and checked by a script (`ac_lock.py`). Later steps stop when a
+  locked file changed; the user unlocks, edits and re-locks explicitly.
+- Spec drift: `ac_lock.py verify sources` exits **3** when only `spec.md` changed since locking. The
+  command then asks the user to confirm the AC still hold (`ac_lock.py confirm-spec sources` re-records
+  the spec hash) or to unlock, edit and re-lock.
 
 ## 6. Known limits
 
 - The guard works on tool calls. The main agent could still reach step definitions with a Bash
   command that doesn't name them (e.g. a recursive `grep` over the test folder), or change a
   `.feature` with Bash or an IDE edit tool. These stay soft rules in `CLAUDE.md`. A main-agent
-  `Grep` over the whole repo is blocked only if its `path` points into the AC folders.
+  `Grep` over the whole repo is blocked only if its `path` points into the AC folders. Bash can also
+  write the files the guard denies to the main agent's tools (locks, `runs/`, `<refsDir>`, the
+  active-run marker).
+- The main agent can edit the guard and scripts themselves (`.specify/extensions/ac/`),
+  `.claude/settings.json` (the guard registration) and `.workflow/config.json` (which shapes every
+  guard rule; `/speckit-ac-init` must write it, so the guard cannot deny it). `speckit-ac doctor`
+  (step 6) checks the installed files' hashes.
 - `git diff`, `git show`, `git log -p` and review tools (code-review skills, PR review bots) show step
   definitions to the main agent unless those folders are excluded. Soft rule in `CLAUDE.md`.
 - API names and signatures are visible to the writer. That's by design: tests must use them.
