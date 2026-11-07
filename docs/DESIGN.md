@@ -42,6 +42,12 @@ The original design and a working implementation exist for one project (CT):
 `uv run --no-project python`), OS, existing hooks/settings, `InternalsVisibleTo`, extra spec inputs.
 Never hard-code SPEC.md, ARCHITECTURE.md, CONTEXT.md or any other non-spec-kit file.
 
+**v1.0 developer environment (fixed):** Windows + uv + PowerShell 7, with spec-kit initialised with
+`--script ps` (`"script": "ps"` in `.specify/init-options.json`). The guard and scripts run via uv
+(`uv run --no-project python -I`); no Python on PATH is required. Other OSes, spec-kit `sh`/`py`
+scripts and PATH-Python detection are deferred; known traps are listed in
+`docs/steps/01-platform-spike.results.md` (N1–N3 and the decision-4 follow-up).
+
 ## 3. AC source (option B)
 
 - Per feature: `specs/NNN-x/acceptance.md`, Gherkin-like, written for humans. Items carry IDs and
@@ -130,11 +136,30 @@ Optional hooks in `extension.yml` (offered, never auto-run): `after_clarify` →
   agents in `.claude/agents/`, the guard registration in `.claude/settings.json` (merged, added last,
   `onFailure: "block"`), marked blocks in `CLAUDE.md`, `.gitignore`, `.gitattributes`, and a deploy
   manifest with hashes.
+- **Human-only `/speckit-ac-*` skills (two layers, step 1 result):** spec-kit 1.0.2 drops
+  `disable-model-invocation` from extension skills, so the model could start them itself.
+  1. The deploy step **patches** `disable-model-invocation: true` into every generated
+     `.claude/skills/speckit-ac-*/SKILL.md`, changing only that key (`metadata.source` must stay:
+     spec-kit's uninstall uses it). `doctor` checks it; `upgrade` re-applies it after its
+     `extension add --force`. A user's own `specify integration upgrade` or `extension add --force`
+     reverts it silently. `--dev` installs make these `SKILL.md` files **symlinks** into
+     `.specify/extensions/ac/.specify-dev/`; the deploy step replaces each link with a real file
+     (content read through the link, flag patched) and records its hash in the deploy manifest.
+     Step 6 verifies what git records, what a clone gets, and that `specify extension remove`
+     still deletes the real files.
+  2. The **guard** blocks (exit 2) a main-agent `Skill` call whose `tool_input.skill` starts with
+     `speckit-ac-`, so the rule holds even when the patch was reverted. Users still run the skills by
+     typing `/speckit-ac-…`.
 - Distributed as a Python CLI `speckit-ac` (mirrors `specify`):
   `uv tool install speckit-ac --from git+https://github.com/<owner>/spec-kit-ac`.
   - `install`: prerequisite checks → `specify extension add --dev <bundled payload>` → deploy.
   - `uninstall`: undo deploy (keep user-modified files, warn) → `specify extension remove ac`.
   - `upgrade`: re-add with `--force` + redeploy. `doctor`: hashes, guard registration, Python command.
+- **Supported host: interactive Claude Code only** (terminal, desktop app, IDE). Headless `claude -p`
+  is not supported (no `SubagentHandback` tool, no workspace trust). The guard **allows
+  `SubagentHandback`** for the three AC roles — the subagents' only reporting channel — with CT's
+  content check on the hand-back text, and never relies on seeing it. Confirmed in the interactive
+  smoke test (steps 7–8).
 - After install, the target repo is self-contained: teammates don't need the uv tool to use the flow.
   The guard command in the committed `settings.json` must **never** point into the uv tool's
   environment; it uses the Python command from `.workflow/config.json`.
@@ -150,6 +175,13 @@ Optional hooks in `extension.yml` (offered, never auto-run): `after_clarify` →
 - Current Claude Code support for `omitClaudeMd`, hook `onFailure: "block"`, `agent_type` in hook
   input, and the `SubagentHandback` tool name (the CT doc relied on Claude Code 2.1.271+ / 2.1.295+).
 
+**Step 1 results (2026-11-07, specify 1.0.2 / Claude Code 2.1.318, headless; details in
+`docs/steps/01-platform-spike.results.md`):** flag dropped (FAIL → two-layer workaround in §9);
+optional hooks prompt and are not auto-run (PASS); payload files copied and removed (PASS);
+`omitClaudeMd`, `onFailure: "block"` (missing interpreter and timeout), `agent_type` (PASS);
+no hand-back tool call reached the hook in headless mode (PARTIAL → interactive-only support, guard
+allows `SubagentHandback`, §9).
+
 ## Decision log
 
 | Date | Decision |
@@ -163,3 +195,7 @@ Optional hooks in `extension.yml` (offered, never auto-run): `after_clarify` →
 | 2026-11-07 | Every implementation step goes through `/spec-implement` with a per-step spec; progress in `docs/steps/TRACKER.md`. |
 | 2026-11-07 | Refs: one shared `refsDir` (default `artifacts/refs/`, git-ignored, configurable), not per feature. |
 | 2026-11-07 | License: MIT (same as spec-kit). `LICENSE` added in step 0; `extension.yml` uses `license: MIT`. |
+| 2026-11-07 | Step 1 gate, risk 1 (option C): deploy patches `disable-model-invocation: true` into the `speckit-ac-*` skills **and** the guard blocks main-agent `Skill` calls for `speckit-ac-*` (§9). |
+| 2026-11-07 | Step 1 gate, N1 (option A): deploy replaces the `--dev` skill symlinks with real, patched files (§9); verified in step 6. |
+| 2026-11-07 | Step 1 gate, hand-back (option A): interactive Claude Code only, `claude -p` unsupported; guard allows `SubagentHandback` for AC roles with a content check (§9). |
+| 2026-11-07 | v1.0 environment: Windows + uv + pwsh, spec-kit `--script ps` (§2). Resolves N2 for v1.0 (PowerShell scripts need no PATH Python); other environments deferred. |

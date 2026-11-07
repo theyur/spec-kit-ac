@@ -15,7 +15,7 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
 | # | Step | Status | Spec | Plan | Verified | Commit |
 |---|------|--------|------|------|----------|--------|
 | 0 | Repo bootstrap: `pyproject.toml` (uv, console script `speckit-ac`), `src/speckit_ac/` layout with `payload/` = the extension, pytest setup, README skeleton, generic `docs/WORKFLOW.md` (from CT doc §0–2, §8) | done | [00-bootstrap.spec.md](00-bootstrap.spec.md) | [plan](../../.claude/plans/00-bootstrap.plan.md) (critic: REVISE → APPROVE, 2 rounds) | 2026-11-07: S00-A01–A09 pass (10 tests; wheel ships `payload/README.md`; no `Requires-Dist`; `uvx --isolated` prints version; `payload_dir()` resolves from a non-editable wheel). Python 3.11 floor not run (see notes) | |
-| 1 | Platform spike (gate): throwaway `specify init` project + one-command test extension; verify the DESIGN §10 risks. Stop and decide with the user if anything fails | todo | | | | |
+| 1 | Platform spike (gate): throwaway `specify init` project + one-command test extension; verify the DESIGN §10 risks. Stop and decide with the user if anything fails | done | [01-platform-spike.spec.md](01-platform-spike.spec.md) · [results](01-platform-spike.results.md) | [plan](../../.claude/plans/01-platform-spike.plan.md) (critic: REVISE → REVISE → APPROVE, 3 rounds) | 2026-11-07: spike run (11 headless runs, $0.037). Risk 1 FAIL (flag dropped; patch and guard-deny both work), risk 2 PASS, risk 3 PASS, risk 4 PARTIAL (no hand-back tool seen headless). New: N1 skills symlinked by `--dev`, N2 spec-kit scripts need PATH Python once an extension is installed. pytest 10 pass; no `src/`/`tests/` change | |
 | 2 | Port and adapt runtime: `guard.py` + all scripts from CT to the per-feature model (DESIGN §3, §8); `test_guard.py` → pytest with CT cases + per-feature / cross-feature cases | todo | | | | |
 | 3 | Agents: translator (feature tag, one feature), writer (`[Scope]`, `Support/Shared`, cross-feature compile fixes, runner/framework aware), judge (`SUPERSEDED`) | todo | | | | |
 | 4 | Commands: `translate` (two phases), `tests-write`, `tests-analyze` (all / `--current`), `critic` (port + `ac`, `features` stages); `extension.yml` with optional hooks | todo | | | | |
@@ -38,3 +38,15 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
   (default `artifacts/refs/`, git-ignored, configurable), regenerated at the start of translate and
   tests-write, as in the original project. `docs/WORKFLOW.md` §3.1 and §4 updated. The `.gitignore`
   entry is for step 5 (init) / step 6 (deploy) to add.
+- Step 1 gate (2026-11-07), see
+  [results § Decisions needed](01-platform-spike.results.md#decisions-needed-gate-r12).
+  **Decided:** risk 1 → option C (deploy patches the flag + guard blocks `Skill` for
+  `speckit-ac-*`; DESIGN §9 + decision log; work for steps 2 and 6); N1 → option A (deploy turns the
+  symlinked skills into real patched files; verified in step 6); N2 → v1.0 environment fixed to
+  Windows + uv + pwsh with spec-kit `--script ps` (DESIGN §2), so no PATH Python is needed;
+  hand-back → option A (interactive Claude Code only, guard allows `SubagentHandback`; DESIGN §9).
+  All gate decisions made; step 1 closed. Carried into later steps: guard blocks `Skill` for
+  `speckit-ac-*` and allows `SubagentHandback` (step 2); deploy patches the flag and materialises
+  the symlinked skills, `doctor`/`upgrade` re-check (step 6); init/doctor check the v1.0 environment
+  (steps 5/6); interactive smoke test re-confirms the headless results (steps 7–8). DESIGN.md unchanged until agreed. Spike files remain only in the session scratchpad;
+  N3 lists the user-level files Claude Code wrote.
