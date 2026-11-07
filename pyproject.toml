@@ -1,0 +1,22 @@
+[project]
+name = "speckit-ac"
+version = "0.1.0.dev0"
+description = "spec-kit extension and CLI that add an isolated acceptance-test workflow (Reqnroll) to .NET projects"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+speckit-ac = "speckit_ac.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.26,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
