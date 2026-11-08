@@ -19,8 +19,8 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
 | 2 | Port and adapt runtime: `guard.py` + all scripts from CT to the per-feature model (DESIGN §3, §8); `test_guard.py` → pytest with CT cases + per-feature / cross-feature cases | done | [02-runtime-port.spec.md](02-runtime-port.spec.md) · [CONFIG.md](../CONFIG.md) | [plan](../../.claude/plans/02-runtime-port.plan.md) (critic: REVISE → REVISE → REVISE, 3 rounds, no BLOCKER; all findings dispositioned) | 2026-11-07: 288 tests pass (CPython 3.14 and 3.11.15): every CT guard case ported + per-/cross-feature, marker, config-state, root-fallback cases; script tests incl. spec drift exit 3, ignored-folder breaches, `.feature` write rules. Payload grep: no CT strings. Mutation spot-check: dropping the `is_file` or timestamp-numbering rule fails tests. Not run: `export_refs.py` against .NET (step 7), live hooks (steps 7–8) | |
 | 3 | Agents: translator (feature tag, one feature), writer (`[Scope]`, `Support/Shared`, cross-feature compile fixes, runner/framework aware), judge (`SUPERSEDED`) | done | [03-agents.spec.md](03-agents.spec.md) | [plan](../../.claude/plans/03-agents.plan.md) (critic: REVISE → APPROVE, 2 rounds; all findings accepted) | 2026-11-08: 328 tests pass (CPython 3.14 and 3.11.15). New `test_agents.py` (28): frontmatter, no CT strings or hard-coded paths, placeholders defined, templates filled mechanically from `ac_feature.py` + config and checked against the real guard with the marker the run scripts write (every input readable, every output writable, build allowed). `testFramework` and `ac_feature.py --all` tests. Mutation spot-check: dropping the enum check, renaming a `paths()` key, removing a judge search root, an undefined placeholder, a changed feedback marker all fail tests. Not run: the agents themselves (step 7) | |
 | 4 | Commands: `translate` (two phases), `tests-write`, `tests-analyze` (all / `--current`), `critic` (port + `ac`, `features` stages); `extension.yml` with optional hooks | done | [04-commands.spec.md](04-commands.spec.md) | [plan](../../.claude/plans/04-commands.plan.md) (critic: REVISE → APPROVE, 2 rounds; all findings accepted) | 2026-11-08: 397 tests pass (CPython 3.14 and 3.11.15). New `test_commands.py` (36): manifest (version = package, commands ↔ files, five optional hooks), command texts (scripts/subcommands/flags exist, subagent start order, step order, no path spec-kit would rewrite, critic hard rules word for word), walks of translate phase 2 / tests-write / tests-analyze through the real guard, and a real `specify init --script ps` + `extension add --dev` (four skills, bodies unchanged, hooks registered). `task_message.py`, `check_acceptance.py`, `--only-current`, marker deletion and guard launch tests (incl. the writer-launch regression). Mutation spot-check: dropping the launch exemption, the marker deletion or the FR coverage check, swapping two start steps, a bare `scripts/` path all fail tests. Not run: commands with a live model, dotnet steps (step 7) | |
-| 5 | `/speckit-ac-init`: detection, questions, AC project scaffolding per framework/runner, config, automatable verification (CT doc §6 items 1, 3–7), smoke-test instructions | todo | | | | |
-| 6 | CLI + deploy: `install` / `uninstall` / `upgrade` / `doctor`, settings.json merge, marked blocks, deploy manifest; install→uninstall round-trip leaves a temp project byte-identical | todo | | | | |
+| 5 | `/speckit-ac-init`: detection, questions, AC project scaffolding per framework/runner, config, automatable verification (CT doc §6 items 1, 3–7), smoke-test instructions | done | [05-init.spec.md](05-init.spec.md) | [plan](../../.claude/plans/05-init.plan.md) (critic: REVISE ×3, no BLOCKER; all 31 findings accepted) | 2026-11-08: 495 tests pass, 8 opt-in skipped (CPython 3.14 and 3.11.15). New `test_init.py` (92): detection (environment problems incl. timestamp option, msbuild evaluation of hand-written solutions without restore, test projects known by packages, CPM pins, blockers, several solutions), config per recipe and refusals, csproj/props rendering per recipe, package version rules, managed blocks, `init_verify` with stubbed dotnet (cleanup, leftovers, warnings-as-errors), smoke marker + every smoke action against the real guard. **Real matrix** (`test_init_e2e.py`, `SPECKIT_AC_DOTNET_E2E=1`, SDK 10.0.403, NuGet): 7 pairs pass every verification check (one with CPM, one with root `TreatWarningsAsErrors`); xUnit v2 on MTP refused. Mutation spot-check: 7 of 7 caught. Not run: the command with a live model, the live smoke test (step 7) | |
+| 6 | CLI + deploy: `install` / `uninstall` / `upgrade` / `doctor`, settings.json merge, marked blocks, deploy manifest; install→uninstall round-trip leaves a temp project byte-identical | done | [06-cli-deploy.spec.md](06-cli-deploy.spec.md) | [plan](../../.claude/plans/06-cli-deploy.plan.md) (critic: REVISE → REVISE → APPROVE, 3 rounds; all 19 findings accepted) | 2026-11-08: 591 tests pass, 8 opt-in skipped (CPython 3.14 and 3.11.15). New `test_deploy.py` (92, fake spec-kit that mirrors the probed `add` / `remove`, incl. its `settings.json` rewrite): every prerequisite and refusal, rollback, skill patch, settings merge, `CLAUDE.md` block, uninstall order by state, kept agents, leftovers, re-run after a failure, upgrade, every doctor check, CLI root/ASCII. **Real spec-kit** (`test_deploy_real.py`, specify 1.0.2, uv, git): fresh and pre-populated projects round-trip byte-identical; planted `__pycache__`/`*.pyc` never installed; committed skills are mode 100644, a `core.symlinks=false` + `autocrlf=true` clone gets patched skills and `doctor` exits 0; upgrade re-patches; uninstall leaves no skill; the wheel ships `.extensionignore`. Mutation spot-check: 9 of 9 caught. Not run: install with a live Claude Code session (step 7) | |
 | 7 | End-to-end sample in `tests/e2e/`: tiny .NET lib + spec-kit; one feature through the full flow with a planted implementation bug (→ `IMPLEMENTATION_FAULT`); a second, contradicting feature (→ `SUPERSEDED`); live guard smoke test (CT doc §6.8) | todo | | | | |
 | 8 | Dogfood in Habit Tracker (`<habit-tracker>`, separate branch/PR there): install, `/speckit-ac-init`, its AC-surface + test-DB ADR, Sonar exclusions for step-definition folders | todo | | | | |
 | 9 | Release: tag `v0.1.0`, GitHub repo, README install line | todo | | | | |
@@ -94,3 +94,47 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
     denies; retry behaviour); whether the `Agent` call's `description` reaches the subagent; Fable
     availability for `/speckit-ac-critic`; the dotnet steps of the commands (build, unit tests,
     `export_refs.py`, `acTestCommand`).
+- Step 5 (2026-11-08): decisions 1–10 approved with the spec (DESIGN §9 changed: init writes the
+  `.gitignore` / `.gitattributes` blocks; decision-log row). Deviations recorded in the plan: D1 the
+  warnings-as-errors check uses CS0168 (not a nullable warning), only when the **evaluated** ref-mode
+  `TreatWarningsAsErrors` is true; D2 `FrameworkReference`s rendered, scaffold re-evaluates projects;
+  D3 surface package versions before the unit tests'; D4 test projects also known by framework packages
+  (`IsTestProject` is empty before a restore). Found and fixed on the way:
+  - `export_refs.py` never imported `json` (step 2); now covered by `init_verify.py` item [4] and a test.
+  - `summarize_trx.py` matched TRX test names to scenario titles literally; NUnit names tests after the
+    generated method (`UnboundStep`, `DoublingOtherNumbers("3",…)`), so NUnit results lost their tags or got
+    the wrong ones. The match now ignores case, spaces and punctuation (step 2 code; new test).
+  - The plain `xunit.v3` package fails under VSTest on the .NET 10 SDK; the recipe uses `xunit.v3.mtp-off`.
+    NUnit on MTP needs `Microsoft.Testing.Extensions.TrxReport` for a TRX.
+  - Script output must stay ASCII (Windows console code page); `__pycache__` next to the installed scripts
+    is git-ignored by the managed block and skipped by the leftover check.
+  - Confirmed: the TRX `className` carries the `F00N` namespace segment for all seven pairs (step 2 A2).
+  Open items:
+  - **Step 6:** `uninstall` removes the managed blocks with `aclib.remove_block`; `doctor` may re-run
+    `init_verify.py`; deploy must exist before `/speckit-ac-init smoke` can pass (agents, guard registration).
+  - **Step 7:** run `/speckit-ac-init` (setup, verify, smoke) with a live model; the smoke test live,
+    including the manual checks; confirm the model passes the multi-line smoke prompt unchanged.
+  - Known limit (WORKFLOW §6): a CRLF file locked before git normalises it does not verify in an LF
+    checkout; normalising text in `ac_lock.py` is deferred.
+- Step 6 (2026-11-08): decisions 1–8 approved with the spec (DESIGN §9 + decision log). Deviations recorded
+  in the plan: D1 manifest / doctor hashes fold CRLF to LF (this machine's git has `core.autocrlf=true`, so a
+  clone checks the LF files out as CRLF); D2 `preexisting` also covers `.specify/extensions/`, each agent file,
+  `settingsCreatedKeys`; D3 `settingsNewline` (below). Found on the way:
+  - spec-kit **rewrites an existing `.claude/settings.json`** on every `extension add` / `remove`
+    (`specify_cli/events.py` `_safe_write_json`: `json.dumps(indent=2)` in text mode, so CRLF on Windows and
+    non-ASCII escaped). The step 1 spike (3.5) missed it because its file was already in that form. Install
+    records the file's line ending before spec-kit touches it, registers in that ending, and uninstall
+    restores it after `remove`.
+  - a fresh `specify init` has no `.specify/extensions/`; `extension add --force` leaves an empty `.backup/`;
+    `extensions.yml` and `.registry` are written with CRLF.
+  - spec-kit honours `.extensionignore`; the payload ships one, so a compiled wheel's bytecode never reaches
+    a project.
+  - DESIGN §9 verification done: git records the patched skills as regular files (mode 100644), a clone
+    with symlinks off gets them intact, and `specify extension remove` deletes the real files.
+  Open items:
+  - **Step 7:** install into the e2e sample with the real CLI (`uv tool install` from the checkout), start a
+    new session, run `/speckit-ac-init` and the live smoke test; confirm the hook command runs in Git Bash
+    with `$CLAUDE_PROJECT_DIR` and the 30 s timeout.
+  - Known limits (WORKFLOW §6): a `settings.json` not in 2-space style keeps its content but not its
+    formatting; a `CLAUDE.md` / `.gitignore` without a final line break gets one back; a user's own
+    `specify integration upgrade` reverts the skill patch until `speckit-ac upgrade`.

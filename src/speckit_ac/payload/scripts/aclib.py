@@ -78,6 +78,11 @@ def load_config(root_dir: Path) -> dict:
         cfg = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as error:
         raise AcError(f"{CONFIG} is not valid JSON: {error}") from None
+    return validate_config(cfg)
+
+
+def validate_config(cfg) -> dict:
+    """Check a config (schema 1, docs/CONFIG.md) and return it with its paths normalised; AcError if invalid."""
     if not isinstance(cfg, dict) or cfg.get("schemaVersion") != SCHEMA_VERSION:
         raise AcError(f"{CONFIG}: schemaVersion must be {SCHEMA_VERSION}")
     for key in STRING_KEYS:
@@ -239,9 +244,73 @@ def write_text(path: Path, text: str):
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
-def write_marker(root_dir: Path, role: str, feature: Feature, run: str, analyze: str | None = None):
-    marker = {"role": role, "feature": feature.dir, "tag": feature.tag, "run": run, "analyze": analyze}
+def write_marker(root_dir: Path, role: str, feature: Feature, run: str, analyze: str | None = None, **extra):
+    marker = {"role": role, "feature": feature.dir, "tag": feature.tag, "run": run, "analyze": analyze, **extra}
     write_text(root_dir / MARKER, json.dumps(marker, indent=2) + "\n")
+
+
+# Marked blocks in project files that the AC workflow owns: .gitignore / .gitattributes (written by /speckit-ac-init)
+# and CLAUDE.md (written by `speckit-ac install`, with HTML-comment markers); all removed by `speckit-ac uninstall`.
+# Everything outside the block is left byte for byte.
+BLOCK_BEGIN = "# >>> speckit-ac (managed; do not edit)"
+BLOCK_END = "# <<< speckit-ac"
+
+
+def _block_span(text: str, begin: str = BLOCK_BEGIN, end_marker: str = BLOCK_END):
+    """(start, end) of the managed block in `text` including its trailing line break, or None."""
+    start = text.find(begin)
+    if start == -1:
+        return None
+    if start > 0 and text[start - 1] != "\n":
+        raise AcError(f"the {begin!r} line must start a line")
+    end = text.find(end_marker, start)
+    if end == -1:
+        raise AcError(f"{begin!r} without {end_marker!r}")
+    end += len(end_marker)
+    if text.startswith("\r\n", end):
+        end += 2
+    elif text.startswith("\n", end):
+        end += 1
+    return start, end
+
+
+def write_block(path: Path, lines: list[str], begin: str = BLOCK_BEGIN, end: str = BLOCK_END) -> bool:
+    """Write the managed block into `path` (created if missing): replaced in place if present, else appended after
+    one blank line. Uses the file's line ending (CRLF if its first line break is CRLF). True if the file changed.
+    `begin` / `end` are the marker lines: `#` comments by default, HTML comments for the CLAUDE.md block that
+    `speckit-ac install` writes."""
+    old = path.read_bytes().decode("utf-8") if path.is_file() else ""
+    newline = "\r\n" if "\n" in old and old.split("\n", 1)[0].endswith("\r") else "\n"
+    block = newline.join([begin, *lines, end]) + newline
+    span = _block_span(old, begin, end)
+    if span:
+        new = old[:span[0]] + block + old[span[1]:]
+    elif not old:
+        new = block
+    else:
+        new = old + ("" if old.endswith("\n") else newline) + newline + block
+    if new == old:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(new.encode("utf-8"))
+    return True
+
+
+def remove_block(path: Path, begin: str = BLOCK_BEGIN, end: str = BLOCK_END) -> bool:
+    """Remove the managed block (and one blank line before it) from `path`. True if the file changed."""
+    if not path.is_file():
+        return False
+    old = path.read_bytes().decode("utf-8")
+    span = _block_span(old, begin, end)
+    if not span:
+        return False
+    before = old[:span[0]]
+    for gap in ("\r\n\r\n", "\n\n"):
+        if before.endswith(gap):
+            before = before[:-len(gap) // 2]
+            break
+    path.write_bytes((before + old[span[1]:]).encode("utf-8"))
+    return True
 
 
 def read_marker(root_dir: Path) -> dict:

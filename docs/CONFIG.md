@@ -1,7 +1,9 @@
 # `.workflow/` — config and runtime files
 
-`/speckit-ac-init` (tracker step 5) writes `.workflow/config.json` once per project. The guard and the
-workflow scripts (`.specify/extensions/ac/`) read it on every call. Design: [DESIGN.md](DESIGN.md) §2, §8.
+`/speckit-ac-init` writes `.workflow/config.json` once per project, through `init_config.py` and
+after the user has confirmed every value. It never overwrites an existing config: change it by hand,
+then run `/speckit-ac-init` again to verify. The guard and the workflow scripts
+(`.specify/extensions/ac/`) read it on every call. Design: [DESIGN.md](DESIGN.md) §2, §8.
 
 ## `config.json` (schema version 1)
 
@@ -20,6 +22,40 @@ workflow scripts (`.specify/extensions/ac/`) read it on every call. Design: [DES
 | `unitTestCommand` | string | Unit test command; `{project}` is replaced. | commands |
 | `acTestCommand` | string | AC test command; `{acProject}` and `{analyzeDir}` are replaced. | commands |
 | `testFramework` | string | Test framework of the AC project: `xunit2`, `xunit3`, `nunit` or `mstest`. The test writer uses its assertion API. | commands (writer task message) |
+
+### Commands per framework and runner
+
+`init_config.py` builds the three commands from one table (`RECIPES`). The runner is
+Microsoft.Testing.Platform when `global.json` has `"test": {"runner": "Microsoft.Testing.Platform"}`,
+otherwise VSTest.
+
+| | VSTest | Microsoft.Testing.Platform |
+|---|---|---|
+| `unitTestCommand` | `dotnet test {project}` | `dotnet test --project {project}` |
+| `acTestCommand` | `dotnet test {acProject} --no-build --results-directory {analyzeDir} --logger "trx;LogFileName=ac-results.trx"` | `dotnet test --project {acProject} --no-build --results-directory {analyzeDir} <TRX option>` |
+| TRX option | — | xUnit v3: `--report-xunit-trx --report-xunit-trx-filename ac-results.trx`; NUnit, MSTest: `--report-trx --report-trx-filename ac-results.trx` |
+
+`acRefBuildCommand` is always `dotnet build <acProject> -p:AcRefMode=true -nologo -v q`.
+
+The packages and properties that `init_scaffold.py` puts into the AC project (besides the Reqnroll adapter,
+`Microsoft.Extensions.TimeProvider.Testing` and the surface's own packages):
+
+| Framework | VSTest | Microsoft.Testing.Platform |
+|---|---|---|
+| xUnit v2 | `xunit`, `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk` | not supported (no runner) |
+| xUnit v3 | `xunit.v3.mtp-off`, `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk`; `OutputType Exe` | `xunit.v3`; `OutputType Exe` |
+| NUnit | `NUnit`, `NUnit3TestAdapter`, `Microsoft.NET.Test.Sdk` | `NUnit`, `NUnit3TestAdapter`, `Microsoft.Testing.Extensions.TrxReport`; `OutputType Exe`, `EnableNUnitRunner` |
+| MSTest | `MSTest` | `MSTest`; `OutputType Exe`, `EnableMSTestRunner` |
+
+On the .NET 10 SDK, plain `xunit.v3` turns on Microsoft.Testing.Platform, which the SDK refuses under
+VSTest; hence `xunit.v3.mtp-off`. Each pair was verified with SDK 10.0.403 and Reqnroll 3.3.4: build,
+TRX written to `{analyzeDir}/ac-results.trx`, bound scenario passed, unbound scenario pending
+(`tests/test_init_e2e.py`, opt-in).
+
+Paths in `acProjectDir`, `refsDir` and `unitTestProjects` must not contain whitespace, because they end
+up in commands that are split on spaces.
+
+### Rules
 
 Rules checked by the guard and the scripts:
 
@@ -49,7 +85,7 @@ Example:
   "refsDir": "artifacts/refs",
   "acRefBuildCommand": "dotnet build tests/App.AcceptanceTests/App.AcceptanceTests.csproj -p:AcRefMode=true -nologo -v q",
   "unitTestCommand": "dotnet test --project {project}",
-  "acTestCommand": "dotnet test --project {acProject} --no-build --results-directory {analyzeDir}",
+  "acTestCommand": "dotnet test --project {acProject} --no-build --results-directory {analyzeDir} --report-xunit-trx --report-xunit-trx-filename ac-results.trx",
   "testFramework": "xunit3"
 }
 ```
@@ -80,14 +116,37 @@ placeholder `<UPPER_SNAKE>` is the key `upperSnake` (see `## Your task message` 
 | File | Written by | Purpose |
 |---|---|---|
 | `active-run.json` | `new_run.py`, `new_analyze.py`; `task_message.py` adds `taskMessage`; deleted by `changed_files.py check` | The active run: `role`, `feature`, `tag`, `run`, `analyze`, and the exact task message. The guard pins every AC-subagent rule to it, blocks AC subagents without a matching marker, and lets the main agent start an AC role only with `prompt` = `taskMessage`, in the foreground. The main agent may not write it. `check` deletes it once it has compared the files (a usage error before that keeps it); it outlives a command only when the command stops before the check (tests-analyze with every test passed; a stop between `task_message.py` and the check). |
-| `guard.log` | guard | One line per subagent tool call: agent type, tool, allow/deny. |
+| `guard.log` | guard | One line per subagent tool call: agent type, tool, allow/deny. `smoke_test.py end` compares the lines a smoke run added with the expected decisions. |
+| `init-check/` | `init_verify.py` | Temporary results of the setup checks (with `specs/999-speckit-ac-check/` and the AC project's `F999` folders); always removed at the end. |
+
+The smoke test writes the marker itself (`smoke_test.py start`). The marker then holds the extra keys
+`smoke: true` and `smokeLogLines`, and its feature is the temporary `specs/999-speckit-ac-smoke/`;
+`smoke_test.py end` removes both.
+
+## Deploy files (written by `speckit-ac install`)
+
+| File | Purpose |
+|---|---|
+| `.workflow/deploy.json` | Deploy manifest, committed. `schemaVersion` 1, `version`, guard `command`, `installedAt`, `preexisting` (which of `.claude/settings.json`, `.claude/agents/` and each AC agent file, `.specify/extensions/`, `.specify/extensions.yml`, `.registry`, `.backup/` existed before install), `settingsCreatedKeys`, `settingsNewline`, `settingsReformatted`, and `files`: path, kind (`agent`, `skill`, `extension`) and sha256 of every deployed file (content with CRLF folded to LF). `uninstall` and `doctor` work from it; it never holds `settings.json` content. |
+| `.claude/settings.json` | One `PreToolUse` group, `matcher` `*`: `uv run --no-project python -I "$CLAUDE_PROJECT_DIR/.specify/extensions/ac/hooks/guard.py"`, `timeout` 30, `onFailure` `block`. Registered only after the installed guard passed a self-test (a main-agent `Read` allowed, `Skill speckit-ac-init` blocked). The Python part is the v1.0 command; `doctor` checks that the config's `python` matches it. |
+| `.claude/agents/ac-*.md` | Byte copies of `.specify/extensions/ac/agents/`. |
+| `.claude/skills/speckit-ac-*/SKILL.md` | spec-kit renders them as symlinks; install replaces each with a real file and adds `disable-model-invocation: true` before `metadata:`. |
+| `CLAUDE.md` | A block between `<!-- >>> speckit-ac (managed; do not edit) -->` and `<!-- <<< speckit-ac -->` with the main agent's soft rules. |
+
+Managed blocks (written by `/speckit-ac-init`, removed by `speckit-ac uninstall`; between
+`# >>> speckit-ac (managed; do not edit)` and `# <<< speckit-ac`, the rest of the file untouched):
+
+- `.gitignore`: `/<refsDir>/`, `**/bin-ref/`, `**/obj-ref/`, `/.workflow/guard.log`,
+  `/.workflow/active-run.json`, `/.specify/extensions/ac/**/__pycache__/`;
+- `.gitattributes`: `<acProjectDir>/Samples/** binary`, `<acProjectDir>/Features/**/*.feature text eol=lf`,
+  `specs/*/acceptance.md text eol=lf`, `specs/*/spec.md text eol=lf`.
 
 `changed_files.py` stores its snapshot in the git directory. Order inside a command:
 `new_run.py` / `new_analyze.py` → `task_message.py` → `changed_files.py snapshot` → subagent (`Agent`
 tool, prompt = the output of `task_message.py`) → `changed_files.py check <role>`.
 
-`acTestCommand` must write the TRX results to `{analyzeDir}/ac-results.trx` (the logger option depends on
-the runner; `/speckit-ac-init` builds the command, step 5). `/speckit-ac-tests-analyze` stops when the
+`acTestCommand` must write the TRX results to `{analyzeDir}/ac-results.trx` (the option depends on
+the runner and framework; see the table above). `/speckit-ac-tests-analyze` stops when the
 file is missing.
 
 ## Invoking the scripts

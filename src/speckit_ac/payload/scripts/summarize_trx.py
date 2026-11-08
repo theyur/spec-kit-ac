@@ -49,10 +49,17 @@ def scenario_tags(features_dir):
     return index
 
 
+def comparable(name):
+    """Letters and digits only, lower case: NUnit names a test after the generated method (`UnboundStep`), xUnit and
+    MSTest after the scenario title (`Unbound step`)."""
+    return "".join(c for c in name.lower() if c.isalnum())
+
+
 def best_match(test_name, scenarios):
     # Scenario Outline rows get the example values appended to the scenario name.
-    matches = [name for name in scenarios if test_name == name or test_name.startswith(name)]
-    return max(matches, key=len) if matches else None
+    test = comparable(test_name)
+    matches = [name for name in scenarios if comparable(name) and test.startswith(comparable(name))]
+    return max(matches, key=lambda name: len(comparable(name))) if matches else None
 
 
 def locate(test_name, class_name, index):

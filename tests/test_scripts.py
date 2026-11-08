@@ -476,6 +476,28 @@ def test_summarize_trx(trx_project):
     assert "LoginSteps.cs:line 12" in md and "Login.cs" not in md and md.count("[non-AC frame(s) hidden]") == 1
 
 
+def test_summarize_trx_nunit_test_names(project):
+    """NUnit names tests after the generated method, not the scenario title (found in step 5's real runs): the
+    match ignores case, spaces and punctuation, and an outline row takes the longest matching title."""
+    write(project / AC / "Features/F001/Calc.feature",
+          "@F001\nFeature: Calc\n\n@AC-001\nScenario: Doubling\n\n@AC-002\nScenario Outline: Doubling other numbers\n\n"
+          "@AC-003\nScenario: Unbound step\n")
+    rows = [("1", "Doubling", "Passed"), ("2", 'DoublingOtherNumbers("3","6","1",null)', "Passed"),
+            ("3", "UnboundStep", "Passed")]
+    results = "".join(f'<UnitTestResult testId="{i}" testName="{n.replace(chr(34), "&quot;")}" outcome="{o}" />'
+                      for i, n, o in rows)
+    tests = "".join(f'<UnitTest id="{i}"><TestMethod className="App.AcceptanceTests.Features.F001.CalcFeature" /></UnitTest>'
+                    for i, _, _ in rows)
+    write(project / "ac-results.trx", '<?xml version="1.0" encoding="utf-8"?>\n<TestRun xmlns="http://microsoft.com/'
+          f'schemas/VisualStudio/TeamTest/2010"><Results>{results}</Results><TestDefinitions>{tests}</TestDefinitions>'
+          "</TestRun>\n")
+    ok(run_script(project, "summarize_trx.py", "ac-results.trx", "ac-results.md"))
+    md = (project / "ac-results.md").read_text(encoding="utf-8")
+    assert "| F001 | Doubling | @F001 @AC-001 | passed |" in md
+    assert '| F001 | DoublingOtherNumbers("3","6","1",null) | @F001 @AC-002 | passed |' in md
+    assert "| F001 | UnboundStep | @F001 @AC-003 | passed |" in md
+
+
 def test_summarize_trx_current(trx_project):
     p = trx_project
     ok(run_script(p, "summarize_trx.py", "ac-results.trx", "ac-results.md", "--current", "F002"))
@@ -553,7 +575,12 @@ def test_installed_layout_has_every_script(project):
     names = sorted(p.name for p in (project / EXTENSION / "scripts").glob("*.py"))
     assert names == ["ac_feature.py", "ac_lock.py", "aclib.py", "changed_files.py", "check_acceptance.py",
                      "check_features.py", "clear_generated.py", "export_refs.py", "extract_feedback.py",
-                     "new_analyze.py", "new_run.py", "record_skips.py", "summarize_trx.py", "task_message.py"]
+                     "init_config.py", "init_detect.py", "init_scaffold.py", "init_verify.py", "new_analyze.py",
+                     "new_run.py", "record_skips.py", "smoke_test.py", "summarize_trx.py", "task_message.py"]
+    templates = sorted(p.relative_to(project / EXTENSION / "templates").as_posix()
+                       for p in (project / EXTENSION / "templates").rglob("*") if p.is_file())
+    assert templates == ["ac-project/AcceptanceTests.csproj.template", "ac-project/Directory.Build.props.template",
+                         "ac-project/reqnroll.json", "acceptance-template.md"]
     assert CONFIG["acProjectDir"] == AC
 
 

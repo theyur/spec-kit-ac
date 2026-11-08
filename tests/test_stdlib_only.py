@@ -6,8 +6,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = ROOT / "src" / "speckit_ac"
-# `aclib`: the payload scripts' shared helper (src/speckit_ac/payload/scripts/aclib.py), itself checked here.
-ALLOWED = set(sys.stdlib_module_names) | {"speckit_ac", "aclib"}
+# The payload scripts import each other (`aclib`, the shared helper; init_* and changed_files), each itself checked
+# here.
+SIBLINGS = {p.stem for p in (PACKAGE_DIR / "payload" / "scripts").glob("*.py")}
+ALLOWED = set(sys.stdlib_module_names) | {"speckit_ac"} | SIBLINGS
 
 
 def non_stdlib_imports(source: str, filename: str = "<string>") -> list[tuple[int, str]]:

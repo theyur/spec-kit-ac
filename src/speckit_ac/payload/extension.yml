@@ -13,6 +13,9 @@ requires:
 
 provides:
   commands:
+    - name: speckit.ac.init
+      file: commands/speckit.ac.init.md
+      description: "Set up the AC workflow once per project: config, Reqnroll test project, verification, guard smoke test"
     - name: speckit.ac.translate
       file: commands/speckit.ac.translate.md
       description: "Draft and lock a feature's acceptance criteria, then translate them into Reqnroll .feature files"

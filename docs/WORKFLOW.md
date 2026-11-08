@@ -36,6 +36,38 @@ that don't load `CLAUDE.md` — not only by instructions.
 The user drives the flow. **After every step the agent reports and stops.** It never starts the next
 step on its own.
 
+### 1.1 Setup (once per project): `/speckit-ac-init`
+
+The mode depends on the project's state:
+
+- **Setup** (no `.workflow/config.json`):
+  - `init_detect.py` reads the environment, the solution and every C# project in it (msbuild
+    evaluation, no restore), the test runner (`global.json`) and central package management.
+  - The command asks only what detection could not settle, and always asks for extra spec inputs
+    (implementation folders are refused).
+  - It shows one summary and waits for an explicit confirmation.
+  - The scripts then write the config (`init_config.py`) and create the AC project (`init_scaffold.py`).
+  - `init_verify.py` runs the checks of [CT doc](reference/WORKFLOW-SETUP-CT.md) §6 items 1 and 3–7
+    with temporary files only (`specs/999-speckit-ac-check/`, the `F999` folders, `.workflow/init-check/`),
+    and checks at the end that nothing is left over.
+- **Verify** (the config exists): `init_verify.py` only. The configuration changes only by hand.
+- **Smoke** (`/speckit-ac-init smoke`, in a **new session** after setup, and again in every new
+  checkout or worktree):
+  - `smoke_test.py start <role>` writes a temporary feature and a marker whose `taskMessage` is a fixed
+    smoke prompt, so the guard lets the main agent start each AC subagent with that prompt.
+  - `smoke_test.py end <role>` compares the new `guard.log` lines with the expected allow and deny
+    decisions, then removes everything.
+  - Three manual checks follow: the main agent's read of a step-definition file, an `Explore`
+    subagent's read of it, and a hook pointed at a missing interpreter.
+
+Supported test frameworks × runners (each verified by a real run): xUnit v2 on VSTest; xUnit v3, NUnit
+and MSTest on VSTest and on Microsoft.Testing.Platform. xUnit v2 has no Microsoft.Testing.Platform
+runner, so init refuses that pair. The commands per pair are in [CONFIG.md](CONFIG.md).
+
+Init also writes managed blocks into `.gitignore` and `.gitattributes`. The `.gitattributes` block
+pins LF line endings for every text file a lock hashes (`spec.md`, `acceptance.md`, `.feature`) and
+marks the samples `binary`, so locks verify in every checkout.
+
 ```
 /speckit-specify → /speckit-clarify → (/speckit-ac-critic spec)
 → /speckit-ac-translate   phase 1: draft acceptance.md (+ coverage table) → (/speckit-ac-critic ac) → user review → lock sources
@@ -236,7 +268,17 @@ a matching marker is denied every call.
   (`.specify/extensions/ac/`; `agents/*.md` are the source of every task message),
   `.claude/settings.json` (the guard registration) and `.workflow/config.json` (which shapes every
   guard rule; `/speckit-ac-init` must write it, so the guard cannot deny it). `speckit-ac doctor`
-  (step 6) checks the installed files' hashes.
+  checks the deployed files against the hashes in `.workflow/deploy.json` (CRLF folded to LF), the
+  skills' `disable-model-invocation: true`, the guard registration and a guard self-test, and the
+  config's Python command; it writes nothing and runs no dotnet (`/speckit-ac-init` verifies the .NET
+  side).
+- A user's own `specify integration upgrade` or `specify extension add --force` silently turns the
+  `speckit-ac-*` skills back into model-invocable ones (the guard still blocks the call). `speckit-ac
+  doctor` reports it; `speckit-ac upgrade` patches them again.
+- `speckit-ac install` rewrites `.claude/settings.json` with 2-space JSON indentation (spec-kit's own
+  style; spec-kit also rewrites the file on every `extension add` / `remove`). A file in that style
+  comes back from `uninstall` byte for byte; any other style keeps its content but not its
+  formatting. Uninstall also adds a final line break to a `CLAUDE.md` / `.gitignore` that had none.
 - `git diff`, `git show`, `git log -p` and review tools (code-review skills, PR review bots) show step
   definitions to the main agent unless those folders are excluded. Soft rule in `CLAUDE.md`.
 - API names and signatures are visible to the writer. That's by design: tests must use them.
@@ -247,7 +289,12 @@ a matching marker is denied every call.
 - The hand-back screen catches code by its markers only. A subagent could still describe
   step-definition logic in prose in its final message; its prompt forbids it.
 - The guard depends on the Python interpreter being found and on the folder being trusted.
-  `onFailure: "block"` and a live guard smoke test cover this.
+  `onFailure: "block"` and the live guard smoke test (`/speckit-ac-init smoke`) cover this.
+- Locks hash the bytes on disk. `.gitattributes` pins LF for the hashed text files, but a file saved
+  with CRLF and locked **before** git normalised it has a different hash from the LF copy in another
+  checkout, so `verify` fails there. Lock only files saved with LF.
+- The smoke test compares (tool, decision) counts, because `guard.log` holds no paths. A wrongly
+  allowed read shows up as a missing `deny`, not by its path.
 - The critic's "no code reading" rule in stage `ac` is a prompt rule only: the critic runs with
   main-agent permissions, so the guard cannot enforce it.
 - Golden samples are only as strong as their content. A sample that contains none of the inputs

@@ -1,0 +1,21 @@
+<Project>
+
+  <!-- MSBuild imports only the nearest Directory.Build.props, so pull in the one above this folder first (if any). -->
+  <PropertyGroup>
+    <_AcParentBuildProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))</_AcParentBuildProps>
+  </PropertyGroup>
+  <Import Project="$(_AcParentBuildProps)" Condition="'$(_AcParentBuildProps)' != ''" />
+
+  <!-- Ref mode (the translator's and writer's build) keeps its own restore and build state. Must be set before the
+       SDK props, so it lives here and not in the csproj. -->
+  <PropertyGroup Condition="'$(AcRefMode)' == 'true'">
+    <BaseIntermediateOutputPath>obj-ref\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin-ref\</BaseOutputPath>
+  </PropertyGroup>
+
+  <!-- Each mode excludes only its own output folders by default; keep the other mode's generated files out of Compile. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**;bin-ref/**;obj-ref/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+</Project>

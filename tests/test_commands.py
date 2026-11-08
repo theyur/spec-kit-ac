@@ -1,4 +1,4 @@
-"""Tests for the extension manifest and the four commands (payload/extension.yml, payload/commands/*.md), step 4.
+"""Tests for the extension manifest and the five commands (payload/extension.yml, payload/commands/*.md), step 4.
 
 The commands are instructions for a model, so these tests check what can be checked without one: the manifest, the
 command texts (every script and subcommand they name exists, the subagent start sequence and the step order, no path
@@ -24,13 +24,14 @@ MANIFEST = PAYLOAD / "extension.yml"
 T, W, J = "ac-feature-translator", "ac-test-writer", "ac-test-fail-judge"
 ALLOW, DENY = 0, 2
 S1 = "specs/001-alpha"
-NAMES = ["translate", "tests-write", "tests-analyze", "critic"]
+NAMES = ["init", "translate", "tests-write", "tests-analyze", "critic"]
 ROLE = {"translate": T, "tests-write": W, "tests-analyze": J}
 RUN_SCRIPT = {"translate": ("new_run.py", "translate"), "tests-write": ("new_run.py", "write"),
               "tests-analyze": ("new_analyze.py", None)}
 # Subcommands each script accepts (its argparse choices / usage); a command may use only these.
 SUBCOMMANDS = {"ac_lock.py": {"lock", "verify", "unlock", "confirm-spec"}, "new_run.py": {"translate", "write"},
-               "changed_files.py": {"snapshot", "check"}, "clear_generated.py": {"features", "steps"}}
+               "changed_files.py": {"snapshot", "check"}, "clear_generated.py": {"features", "steps"},
+               "smoke_test.py": {"start", "end", "isolation-file"}}
 # Step order inside "## Steps" (a subsequence: other mentions may sit in between).
 STEP_ORDER = {
     "translate": [("ac_feature.py", None), ("ac_lock.py", "verify"), ("check_acceptance.py", None),
@@ -157,7 +158,7 @@ def test_scripts_and_subcommands_exist(name):
 
 @pytest.mark.parametrize("name", NAMES)
 def test_named_commands_exist(name):
-    provided = {n.split(".")[-1] for n, _ in manifest_commands()} | {"init"}  # init arrives in step 5
+    provided = {n.split(".")[-1] for n, _ in manifest_commands()}
     for command in re.findall(r"/speckit-ac-([a-z-]+)", text(name) + MANIFEST.read_text(encoding="utf-8")):
         assert command in provided, f"/speckit-ac-{command}"
 
@@ -221,6 +222,38 @@ def test_tests_analyze_rules():
     for verdict in ("TRANSLATION_FAULT", "IMPLEMENTATION_FAULT", "TEST_FAULT", "SPEC_AMBIGUITY", "UNEXPRESSIBLE",
                     "SUPERSEDED", "INCONCLUSIVE"):
         assert f"`{verdict}`" in content
+
+
+def test_init_rules():
+    raw = text("init")
+    content = flat(raw)
+    for mode in ("**smoke** mode", "**setup** mode", "**verify** mode"):
+        assert mode in content
+    assert "`<python>` is `uv run --no-project python -I`" in content  # no config yet
+    assert "Never use `$CLAUDE_PROJECT_DIR` in a script path" in content
+    assert "The **only** file you edit yourself is the `<NoWarn>` property of the AC project file" in content
+    setup = raw.split("\n## Setup\n", 1)[1].split("\n## Verify\n", 1)[0]
+    assert is_subsequence([("init_detect.py", None), ("init_config.py", None), ("init_scaffold.py", None),
+                           ("init_verify.py", None)], invocations(setup)), invocations(setup)
+    flat_setup = flat(setup)
+    assert flat_setup.index("Wait for an explicit confirmation") < flat_setup.index("`init_config.py --solution")
+    assert flat_setup.index("`supported.supported` is false") < flat_setup.index("Show **one summary**")
+    assert "`implementationFolders`" in flat_setup and "Extra spec inputs**: always ask" in flat_setup
+    assert "`init_scaffold.py --target-framework <the confirmed target framework>`" in flat_setup
+    assert "delete `.workflow/config.json`" in flat_setup  # scaffold failure: back to setup
+    assert "`<NoWarn>$(NoWarn);CS1234</NoWarn>`" in flat_setup and "run `init_verify.py` once more" in flat_setup
+    smoke = raw.split("\n## Smoke\n", 1)[1].split("\n## Report\n", 1)[0]
+    assert is_subsequence([("smoke_test.py", "start"), ("Agent", None), ("smoke_test.py", "end"),
+                           ("smoke_test.py", "isolation-file"), ("smoke_test.py", "isolation-file")],
+                          invocations(smoke)), invocations(smoke)
+    flat_smoke = flat(smoke)
+    assert "`run_in_background: false`" in flat_smoke and "the exact output of `smoke_test.py start`" in flat_smoke
+    assert "the guard denies the launch" in flat_smoke and "reports that its read was blocked" in flat_smoke
+    assert "`.specify/extensions/ac/hooks/guard.py`" in flat_smoke and "`onFailure: block`" in flat_smoke
+    report = flat(raw.split("\n## Report\n", 1)[1])
+    assert "`/speckit-constitution`" in report and "never edit the constitution yourself" in report
+    assert "run `/speckit-ac-init smoke`" in report
+    assert "Never start another command" in content
 
 
 def test_critic_rules():
@@ -384,7 +417,7 @@ def test_walk_tests_analyze(project):
 
 @pytest.mark.skipif(shutil.which("specify") is None, reason="specify (spec-kit) not installed")
 def test_real_spec_kit_install(tmp_path):
-    """specify init --script ps + extension add --dev: the manifest is valid, the four skills are rendered with
+    """specify init --script ps + extension add --dev: the manifest is valid, the five skills are rendered with
     their command bodies unchanged, and the five optional hooks are registered."""
     def specify(*args, cwd):
         result = subprocess.run(["specify", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8",

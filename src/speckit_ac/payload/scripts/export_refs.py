@@ -8,6 +8,7 @@ Reference assemblies drop method bodies and private members but keep every type,
 included, with their non-private members. Those name the implementation's structure, so the listing keeps public
 (and protected nested) types only.
 """
+import json
 import re
 import shutil
 import subprocess
@@ -56,7 +57,8 @@ def check_no_internals_visible_to(project):
     candidates = [f for f in folder.rglob("*") if f.suffix in (".cs", ".csproj", ".props", ".targets")
                   and not any(re.match(r"(bin|obj)", s, re.IGNORECASE) for s in f.relative_to(folder).parts)]
     candidates += [ROOT / n for n in ("Directory.Build.props", "Directory.Build.targets") if (ROOT / n).is_file()]
-    hits = [f.relative_to(ROOT).as_posix() for f in candidates if "InternalsVisibleTo" in f.read_text(encoding="utf-8")]
+    hits = [f.relative_to(ROOT).as_posix() for f in candidates
+            if "InternalsVisibleTo" in f.read_text(encoding="utf-8", errors="replace")]
     if hits:
         sys.exit("FAIL: InternalsVisibleTo puts internal members into the reference assembly:\n  " + "\n  ".join(hits))
 

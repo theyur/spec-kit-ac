@@ -140,8 +140,10 @@ Optional hooks in `extension.yml` (offered, never auto-run): `after_clarify` →
   `--from` accepts only http(s) URLs; there are **no install/remove lifecycle hooks**.
 - Therefore a **deploy step** handles the Claude-side files spec-kit doesn't know about: the three
   agents in `.claude/agents/`, the guard registration in `.claude/settings.json` (merged, added last,
-  `onFailure: "block"`), marked blocks in `CLAUDE.md`, `.gitignore`, `.gitattributes`, and a deploy
-  manifest with hashes.
+  `onFailure: "block"`), marked blocks in `CLAUDE.md`, and a deploy manifest with hashes (`.workflow/deploy.json`,
+  committed; not in the extension folder, which `upgrade` and `uninstall` replace). The marked
+  blocks in `.gitignore` and `.gitattributes` depend on `acProjectDir` and `refsDir`, so
+  `/speckit-ac-init` writes them (step 5 decision); `uninstall` removes them with the same helper.
 - **Human-only `/speckit-ac-*` skills (two layers, step 1 result):** spec-kit 1.0.2 drops
   `disable-model-invocation` from extension skills, so the model could start them itself.
   1. The deploy step **patches** `disable-model-invocation: true` into every generated
@@ -168,7 +170,14 @@ Optional hooks in `extension.yml` (offered, never auto-run): `after_clarify` →
   smoke test (steps 7–8).
 - After install, the target repo is self-contained: teammates don't need the uv tool to use the flow.
   The guard command in the committed `settings.json` must **never** point into the uv tool's
-  environment; it uses the Python command from `.workflow/config.json`.
+  environment. Install writes it before any config exists, so it uses the v1.0 Python command
+  (`uv run --no-project python -I`, the same constant init writes into the config); `doctor` checks
+  that the config's `python` matches it. Hook `timeout` 30 s (a cold uv start is slower than the
+  spike's 15 s, and a timeout blocks the call).
+- Uninstall takes the guard registration off first (a registered guard whose file is gone blocks every
+  call), keeps agents the user changed, and removes spec-kit's empty bookkeeping (`.registry` without
+  extensions, `extensions.yml` in its empty state, empty `.backup/`) only where it did not exist before
+  install, so a fresh project round-trips byte for byte. `doctor` never writes and runs no dotnet.
 - Runtime code (guard, scripts, CLI): Python 3, standard library only. pytest for development only.
 
 ## 10. Known risks to verify early (step 1 spike)
@@ -208,3 +217,5 @@ allows `SubagentHandback`, §9).
 | 2026-11-07 | Step 2 spec: active-run marker `.workflow/active-run.json` (§8); missing config → guard allows the main agent, denies AC roles (invalid config blocks all); v1.0 supports only `specs/NNN-name` features; per-role visibility (§8); main agent may not write lock files, `runs/`, `refsDir`, the marker; scripts share `aclib.py`, guard standalone; spec drift = `ac_lock.py verify` exit 3 + `confirm-spec`; CT's experiment log dropped. |
 | 2026-11-08 | Step 3 spec: each agent file defines its task-message template; config key `testFramework` (`xunit2`/`xunit3`/`nunit`/`mstest`, no runner key); `ac_feature.py --all` for the judge; one `.feature` file per feature; translator stops on build errors outside its feature; writer scopes every `[Binding]`, no bindings in `Support/Shared/`, `API-CHANGED:` pending steps for unfaithful cross-feature fixes; `SUPERSEDED` only for regression scenarios; writer feedback only what the current feature's writer can fix. |
 | 2026-11-08 | Step 4 spec: `task_message.py` builds each subagent's task message from its agent file and records it in the active-run marker; the guard lets the main agent start an AC role only with that exact prompt, in the foreground (also fixes the writer launch the step-definition text rule blocked); `changed_files.py check` deletes the marker; `acceptance.md` format (Coverage table, `### AC-NNN (refs) title` items) with `check_acceptance.py` before `sources` is locked (every FR covered, a scenario may be "not testable through the API"); translate picks its phase from the lock state; tests-analyze always runs all features' tests, `--current` narrows only the judge's input; tests-analyze verifies every feature's existing locks (drift elsewhere warns); critic on Fable/high, `ac` revises only before the lock, `features` is one report-only pass; manifest checked by the real `specify` (test skipped without it), `requires.speckit_version: ">=1.0.2"`. |
+| 2026-11-08 | Step 6 spec: deploy manifest `.workflow/deploy.json` (committed; hashes the installed extension files too, so `doctor` needs no bundled payload); guard hook `timeout: 30`, Python = the v1.0 constant, checked against the config by `doctor`; `settings.json` re-serialised with `indent=2` (no content in the manifest); uninstall removes spec-kit's empty leftovers only when they did not exist before install; `doctor` runs no dotnet; uninstall needs the manifest; no `argument-hint` patch; payload `.extensionignore`. Implementation: hashes fold CRLF to LF (an `autocrlf=true` clone); the settings file's line ending is recorded before spec-kit rewrites it and restored on uninstall. |
+| 2026-11-08 | Step 5 spec: `/speckit-ac-init` = command + deterministic scripts (`init_detect`, `init_config`, `init_scaffold`, `init_verify`, `smoke_test`), one summary confirmation before any write; init (not deploy) writes the `.gitignore` / `.gitattributes` managed blocks (§9); LF pinned for every locked text file, samples `binary`; ref mode references `<refsDir>/*.dll` by one glob; packages from a fixed framework × runner recipe plus the surface's public packages (central pins, then the surface's, then the unit tests' versions, then latest stable); verification never writes into product projects; re-running init with a config only verifies; the smoke test writes its own marker (`/speckit-ac-init smoke`); only verified pairs are supported (7 of 8: xUnit v2 has no Microsoft.Testing.Platform runner); `.workflow/active-run.json` is git-ignored. |
