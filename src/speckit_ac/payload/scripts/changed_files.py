@@ -4,8 +4,10 @@ Usage: changed_files.py snapshot | check <ac-feature-translator|ac-test-writer|a
 Content hashes, not `git status`: git status can't see a second change to an already-modified file, or writes to
 ignored paths. The snapshot is kept in the git directory, so it is not part of the working tree it describes.
 The allowlist comes from the active-run marker (.workflow/active-run.json), the same rules the guard enforces.
-Required order: new_run.py / new_analyze.py (writes the marker, copies input-feedback.md) -> snapshot -> subagent
--> check. A snapshot taken before the run script would report those files as changes.
+Required order: new_run.py / new_analyze.py (writes the marker, copies input-feedback.md) -> task_message.py (adds
+the task message to the marker) -> snapshot -> subagent -> check. A snapshot taken earlier would report those files as
+changes. `check` deletes the marker once it has compared the files, whatever the result; a usage error before that
+(no snapshot, a marker for another role) keeps it.
 """
 import json
 import re
@@ -56,16 +58,20 @@ def check(root, cfg, role):
     marker = aclib.read_marker(root)
     if marker["role"] != role:
         raise aclib.AcError(f"the active run is for {marker['role']}, not {role}.")
-    before, after = json.loads(snap.read_text(encoding="utf-8")), tree_hashes(root, cfg)
-    changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
-    breaches = [p for p in changed if not aclib.may_change(p, marker, cfg)]
-    for p in changed:
-        state = "added" if p not in before else "removed" if p not in after else "changed"
-        print(f"{state}: {p}" + ("   <-- OUTSIDE ALLOWLIST" if p in breaches else ""))
-    if not changed:
-        print("No files changed")
-    if breaches:
-        raise aclib.AcError(f"isolation breach, {len(breaches)} file(s) outside the {role} allowlist")
+    try:
+        before, after = json.loads(snap.read_text(encoding="utf-8")), tree_hashes(root, cfg)
+        changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
+        breaches = [p for p in changed if not aclib.may_change(p, marker, cfg)]
+        for p in changed:
+            state = "added" if p not in before else "removed" if p not in after else "changed"
+            print(f"{state}: {p}" + ("   <-- OUTSIDE ALLOWLIST" if p in breaches else ""))
+        if not changed:
+            print("No files changed")
+        if breaches:
+            raise aclib.AcError(f"isolation breach, {len(breaches)} file(s) outside the {role} allowlist")
+    finally:
+        # The run is over: without a marker no AC subagent can start or act until the next run script.
+        (root / aclib.MARKER).unlink(missing_ok=True)
 
 
 def main():

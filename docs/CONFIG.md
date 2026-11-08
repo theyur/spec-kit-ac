@@ -59,8 +59,11 @@ Example:
 A feature is a folder `specs/NNN-name` directly under `specs/` (≥ 3 digits; v1.0 rejects timestamp
 and custom feature folders). Its tag is `FNNN`. `ac_feature.py` prints all of these as JSON; `ac_feature.py --all` lists every
 feature folder with its tag (any folder under `specs/` that is not a valid feature fails the listing).
-The subagents' task messages are filled from these keys and the config: a placeholder `<UPPER_SNAKE>`
-is the key `upperSnake` (see `## Your task message` in each `payload/agents/*.md`).
+The subagents' task messages are filled by `task_message.py` from these keys and the config: a
+placeholder `<UPPER_SNAKE>` is the key `upperSnake` (see `## Your task message` in each
+`payload/agents/*.md`); `RUN_ID` / `ANALYZE_ID` come from the marker, `FEATURE_LIST` from
+`ac_feature.py --all` (only the judge's message uses it). `check_acceptance.py` checks a feature's
+`acceptance.md` (format: `templates/acceptance-template.md` in the extension) before `sources` is locked.
 
 | Path | Contents |
 |---|---|
@@ -76,11 +79,16 @@ is the key `upperSnake` (see `## Your task message` in each `payload/agents/*.md
 
 | File | Written by | Purpose |
 |---|---|---|
-| `active-run.json` | `new_run.py`, `new_analyze.py` | The active run: `role`, `feature`, `tag`, `run`, `analyze`. The guard pins every AC-subagent rule to it and blocks AC subagents without a matching marker. The main agent may not write it. |
+| `active-run.json` | `new_run.py`, `new_analyze.py`; `task_message.py` adds `taskMessage`; deleted by `changed_files.py check` | The active run: `role`, `feature`, `tag`, `run`, `analyze`, and the exact task message. The guard pins every AC-subagent rule to it, blocks AC subagents without a matching marker, and lets the main agent start an AC role only with `prompt` = `taskMessage`, in the foreground. The main agent may not write it. `check` deletes it once it has compared the files (a usage error before that keeps it); it outlives a command only when the command stops before the check (tests-analyze with every test passed; a stop between `task_message.py` and the check). |
 | `guard.log` | guard | One line per subagent tool call: agent type, tool, allow/deny. |
 
 `changed_files.py` stores its snapshot in the git directory. Order inside a command:
-`new_run.py` / `new_analyze.py` → `changed_files.py snapshot` → subagent → `changed_files.py check <role>`.
+`new_run.py` / `new_analyze.py` → `task_message.py` → `changed_files.py snapshot` → subagent (`Agent`
+tool, prompt = the output of `task_message.py`) → `changed_files.py check <role>`.
+
+`acTestCommand` must write the TRX results to `{analyzeDir}/ac-results.trx` (the logger option depends on
+the runner; `/speckit-ac-init` builds the command, step 5). `/speckit-ac-tests-analyze` stops when the
+file is missing.
 
 ## Invoking the scripts
 

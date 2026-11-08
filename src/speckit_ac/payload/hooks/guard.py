@@ -3,7 +3,9 @@
 Registered once in .claude/settings.json with matcher "*" (installed as .specify/extensions/ac/hooks/guard.py).
 Hooks from settings also fire inside subagents, so the policy is picked from `agent_type`: the three AC roles get
 default-deny allowlists pinned to the active run (.workflow/active-run.json), everything else (main agent and every
-other subagent type) gets the main rules.
+other subagent type) gets the main rules. A main-agent `Agent` call that starts an AC role must carry exactly the task
+message task_message.py recorded in the marker, in the foreground; such a call is exempt from the step-definition
+text rule, since that message names those folders by design.
 
 Block = reason on stderr + exit 2. Allow = exit 0, no output. Any error = exit 2 (fail closed).
 This file is self-contained on purpose: it is the security boundary and imports no project code.
@@ -37,6 +39,9 @@ RUN_ID = {TRANSLATOR: re.compile(r"^translate-\d{3,}$"), WRITER: re.compile(r"^r
           JUDGE: re.compile(r"^run-\d{3,}$")}
 ANALYZE_ID = re.compile(r"^analyze-\d+$")
 SKILL_PREFIXES = ("speckit-ac-", "speckit.ac.")
+LAUNCH_TOOLS = ("Agent", "Task")  # `Task` is the older name of the subagent tool
+LAUNCH_RULE = ("Start AC subagents only from the /speckit-ac-* commands: prompt = the exact output of task_message.py, "
+               "run_in_background false.")
 
 
 class Deny(Exception):
@@ -51,6 +56,12 @@ def norm(path):
 def fold(path):
     """A project-relative path in the same case and slash form as norm() output."""
     return os.path.normcase(path).replace("\\", "/").strip("/")
+
+
+def normalise_message(text):
+    """Line ends to LF, trailing spaces per line and surrounding blank lines removed (task-message comparison)."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return "\n".join(line.rstrip() for line in lines).strip("\n")
 
 
 def project_root(project, cwd):
@@ -238,6 +249,13 @@ class Guard:
         if self.cfg is None:
             return  # AC workflow not initialised: nothing else to protect yet
 
+        if self.tool in LAUNCH_TOOLS:
+            kind = self.input.get("subagent_type")
+            kind = kind.strip().lower() if isinstance(kind, str) else ""
+            if kind in AC_ROLES:
+                self.launch_rule(kind)
+                return  # exempt from the step-definition text rule: the task message names those folders
+
         # Writes outside the project (scratchpad, memory, …) are none of this guard's business for the main agent.
         rel = self.project_rel(self.path_field()) if self.tool in WRITE_TOOLS else None
         if rel is not None:
@@ -296,6 +314,18 @@ class Guard:
         self.feature, self.tag = fold(feature), fold(tag)
         self.run_dir = f"{self.feature}/ac/runs/{fold(run)}"
         self.analyze_dir = f"{self.run_dir}/{fold(analyze)}" if analyze else None
+        return marker
+
+    def launch_rule(self, role):
+        """The main agent starts an AC role only with the recorded task message, in the foreground."""
+        marker = self.load_marker(role)
+        message, prompt = marker.get("taskMessage"), self.input.get("prompt")
+        if not isinstance(message, str) or not message.strip():
+            raise Deny(f"No task message for {role} in {MARKER} (run task_message.py first). {LAUNCH_RULE}")
+        if self.input.get("run_in_background") not in (None, False):
+            raise Deny(f"{role} must run in the foreground. {LAUNCH_RULE}")
+        if not isinstance(prompt, str) or normalise_message(prompt) != normalise_message(message):
+            raise Deny(f"The prompt for {role} is not the recorded task message. {LAUNCH_RULE}")
 
     def folders(self, role):
         """Folders the role may read and search (search roots)."""

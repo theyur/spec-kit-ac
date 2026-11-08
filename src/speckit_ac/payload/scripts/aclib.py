@@ -266,3 +266,31 @@ def may_change(path: str, marker: dict, cfg: dict) -> bool:
         in_code = any(glob_regex(f"{ac}/{folder}/**").match(path) for folder in ("StepDefinitions", "Support"))
         return (in_code and not feature_file) or glob_regex(f"{run_dir}/writer-report.md").match(path) is not None
     return glob_regex(f"{run_dir}/{marker['analyze']}/judge-report.md").match(path) is not None
+
+
+TASK_MESSAGE_SECTION = "## Your task message"
+
+
+def camel(name: str) -> str:
+    """UPPER_SNAKE placeholder name -> camelCase key (`AC_PROJECT_DIR` -> `acProjectDir`)."""
+    first, *rest = name.lower().split("_")
+    return first + "".join(part.title() for part in rest)
+
+
+def template_lines(agent_file: Path) -> list[tuple[str, str]]:
+    """[(label, raw value)] of the ```text template in an agent file's `## Your task message` section."""
+    text = agent_file.read_text(encoding="utf-8").replace("\r\n", "\n")
+    start = text.find("\n" + TASK_MESSAGE_SECTION + "\n")
+    if start == -1:
+        raise AcError(f"{agent_file.name}: no `{TASK_MESSAGE_SECTION}` section")
+    end = text.find("\n## ", start + len(TASK_MESSAGE_SECTION) + 2)
+    match = re.search(r"```text\n(.*?)\n```", text[start:end if end != -1 else len(text)], re.DOTALL)
+    if not match:
+        raise AcError(f"{agent_file.name}: no ```text template in `{TASK_MESSAGE_SECTION}`")
+    lines = []
+    for line in match[1].split("\n"):
+        if ": " not in line:
+            raise AcError(f"{agent_file.name}: template line without `Label: value`: {line}")
+        label, raw = line.split(": ", 1)
+        lines.append((label, raw))
+    return lines

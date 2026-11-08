@@ -1,10 +1,11 @@
 """Write the cleaned AC results the judge may read (docs/WORKFLOW.md §4).
 
-Usage: summarize_trx.py <ac-results.trx> <ac-results.md> [--current FNNN]
+Usage: summarize_trx.py <ac-results.trx> <ac-results.md> [--current FNNN [--only-current]]
 Tags come from the feature files, because the TRX doesn't carry them. A test's feature is taken from an F<digits>
 segment of its class name (the generated namespace follows the Features/FNNN/ folder); otherwise from its scenario
 name, marked ambiguous when two features have a scenario of that name. Stack frames outside the AC project are hidden.
-With --current, results are split into "Current feature" and "Regression" (all other features).
+With --current, results are split into "Current feature" and "Regression" (all other features); --only-current
+reduces the regression section to one line of counts and the F00N/AC-NNN keys of the results that did not pass.
 """
 import argparse
 import re
@@ -152,6 +153,8 @@ def main():
     parser.add_argument("trx")
     parser.add_argument("out")
     parser.add_argument("--current", help="the current feature's tag, e.g. F003")
+    parser.add_argument("--only-current", action="store_true",
+                        help="with --current: detail only the current feature; other features are counted and named")
     args = parser.parse_args()
     root = aclib.root(__file__)
     cfg = aclib.load_config(root)
@@ -168,13 +171,25 @@ def main():
         body, counts = section(mine, 3)
         lines += [f"## Current feature ({current})", "", *body, ""]
         body, other_counts = section(others, 3)
+        if args.only_current:
+            # The judge looks only at the current feature; regressions are counted and named, never detailed.
+            keys = ", ".join(t["key"] or t["name"] for t in others if t["outcome"] != "passed") or "none"
+            body = [f"Not part of this analysis (--current): {len(others)} result(s) of other features "
+                    f"({' · '.join(f'{k} {other_counts[k]}' for k in OUTCOMES)}); not passed: {keys}."]
         lines += ["## Regression (other features)", "", *body]
+        scopes = (f"current {current}: " + ", ".join(f"{k} {counts[k]}" for k in OUTCOMES)
+                  + "; regression: " + ", ".join(f"{k} {other_counts[k]}" for k in OUTCOMES))
         counts = {k: counts[k] + other_counts[k] for k in OUTCOMES}
     else:
+        if args.only_current:
+            raise aclib.AcError("--only-current needs --current <tag>")
         body, counts = section(tests, 2)
         lines += body
+        scopes = None
     aclib.write_text(Path(args.out), "\n".join(lines) + "\n")
     print(f"Wrote {args.out}: {len(tests)} test(s), " + ", ".join(f"{k} {v}" for k, v in counts.items()))
+    if scopes:
+        print(scopes)
 
 
 if __name__ == "__main__":

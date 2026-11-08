@@ -1,0 +1,58 @@
+schema_version: "1.0"
+
+extension:
+  id: ac
+  name: "Acceptance tests (AC)"
+  version: "0.1.0.dev0"
+  description: "Isolated acceptance-test workflow for .NET: reviewed and locked acceptance criteria, translated to Reqnroll features and bound to step definitions by subagents that never see the implementation."
+  author: "spec-kit-ac"
+  license: MIT
+
+requires:
+  speckit_version: ">=1.0.2"
+
+provides:
+  commands:
+    - name: speckit.ac.translate
+      file: commands/speckit.ac.translate.md
+      description: "Draft and lock a feature's acceptance criteria, then translate them into Reqnroll .feature files"
+    - name: speckit.ac.tests-write
+      file: commands/speckit.ac.tests-write.md
+      description: "Write a feature's Reqnroll step definitions from the spec and the public API only"
+    - name: speckit.ac.tests-analyze
+      file: commands/speckit.ac.tests-analyze.md
+      description: "Run all acceptance tests and have the isolated judge classify every failure"
+    - name: speckit.ac.critic
+      file: commands/speckit.ac.critic.md
+      description: "Independent critic review of spec, plan, tasks, acceptance criteria or feature files"
+
+hooks:
+  after_clarify:
+    - command: speckit.ac.critic
+      optional: true
+      priority: 10
+      prompt: "Type /speckit-ac-critic spec to have the spec reviewed before drafting acceptance criteria"
+      description: "Critic review of the clarified spec"
+    - command: speckit.ac.translate
+      optional: true
+      priority: 20
+      prompt: "Type /speckit-ac-translate to draft this feature's acceptance criteria"
+      description: "Draft the feature's acceptance criteria (acceptance.md)"
+  after_plan:
+    - command: speckit.ac.critic
+      optional: true
+      priority: 10
+      prompt: "Type /speckit-ac-critic plan to have the plan reviewed"
+      description: "Critic review of the plan"
+  after_tasks:
+    - command: speckit.ac.critic
+      optional: true
+      priority: 10
+      prompt: "Type /speckit-ac-critic tasks to have the tasks reviewed"
+      description: "Critic review of the tasks"
+  after_implement:
+    - command: speckit.ac.tests-write
+      optional: true
+      priority: 10
+      prompt: "Type /speckit-ac-tests-write to write this feature's acceptance step definitions"
+      description: "Write the feature's acceptance step definitions"

@@ -4,7 +4,7 @@ The agents are prompts, so these tests check what can be checked without running
 absence of CT specifics and hard-coded paths, the task-message template, and — the main point — that every input
 the template names is readable, and every output writable, for that role under the real guard and a real
 active-run marker written by the run scripts. Templates are filled mechanically from `ac_feature.py` and the
-config, so renaming a key on either side fails here.
+config by task_message.py (the script the commands use), so renaming a key on either side fails here.
 """
 
 import json
@@ -51,7 +51,6 @@ CT_STRINGS = ["SPEC.md", "acSources", ".workflow/runs", "/ac-translate", "/ac-te
 PATH_FRAGMENTS = ["specs/", ".workflow/", "Features/", "StepDefinitions/", "Support/", "Samples/"]
 VERDICTS = ["TRANSLATION_FAULT", "TEST_FAULT", "IMPLEMENTATION_FAULT", "SPEC_AMBIGUITY", "UNEXPRESSIBLE",
             "SUPERSEDED", "INCONCLUSIVE"]
-RUNTIME = {"RUN_ID", "ANALYZE_ID", "FEATURE_LIST"}  # filled from the run scripts' output / ac_feature.py --all
 SECTION = "## Your task message"
 
 
@@ -88,25 +87,6 @@ def template(role):
 
 def placeholders(value):
     return re.findall(r"<([A-Z_]+)>", value)
-
-
-def camel(name):
-    first, *rest = name.lower().split("_")
-    return first + "".join(part.title() for part in rest)
-
-
-def fill(role, feature, config, ids, feature_list):
-    """The task message a command would send: every <UPPER_SNAKE> is the camelCase key of the ac_feature.py output,
-    else of the config (lists joined with ", "); only RUNTIME names are special. Unknown names raise KeyError."""
-    def value(name):
-        if name in ids:
-            return ids[name]
-        if name == "FEATURE_LIST":
-            return ", ".join(f"{f['featureDir']} ({f['tag']})" for f in feature_list)
-        key = camel(name)
-        found = feature[key] if key in feature else config[key]
-        return ", ".join(found) if isinstance(found, list) else str(found)
-    return [(label, re.sub(r"<([A-Z_]+)>", lambda m: value(m[1]), raw)) for label, raw in template(role)]
 
 
 # ---- frontmatter and text ---------------------------------------------------------------------------------------
@@ -228,18 +208,21 @@ def test_guard_consistency(tmp_path, role):
     project files are readable by name, a search rooted at the project folder is not."""
     project = make_project(tmp_path / "proj").resolve()
     ids = start_run(project, role)
-    config = json.loads((project / ".workflow/config.json").read_text(encoding="utf-8"))
     feature = script_json(project, "--feature", "F001")
-    feature_list = script_json(project, "--all")
     run_dir = f"{feature['runsDir']}/{ids['RUN_ID']}"
     # Files the command or an earlier step leaves for the subagent.
     write(project / run_dir / "input-feedback.md")
     write(project / run_dir / "writer-report.md")
     if role == J:
         write(project / run_dir / ids["ANALYZE_ID"] / "ac-results.md")
+    # The message exactly as the command sends it (task_message.py, step 4), with every optional line present.
+    out = run_script(project, "task_message.py", "--feature", "F001")
+    assert out.returncode == 0, out.stderr
+    message = [tuple(line.split(": ", 1)) for line in out.stdout.rstrip("\n").split("\n")]
+    assert [label for label, _ in message] == [label for label, _ in template(role)]
     guard = Guard(project, role)
 
-    for label, value in fill(role, feature, config, ids, feature_list):
+    for label, value in message:
         kind = KINDS[role][label]
         if kind == "value":
             continue
@@ -277,11 +260,6 @@ def test_guard_consistency(tmp_path, role):
             guard.allows("Bash", command=value)
         else:
             raise AssertionError(f"unknown kind {kind}")
-
-
-def test_fill_fails_on_an_unknown_placeholder():
-    with pytest.raises(KeyError):
-        fill(T, {}, {}, {"RUN_ID": "translate-001"}, [])
 
 
 # ---- role rules ---------------------------------------------------------------------------------------------

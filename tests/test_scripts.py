@@ -238,8 +238,10 @@ def git_project(project):
 
 def test_changed_files_allowlist(git_project):
     p = git_project
+    marker = p / ".workflow/active-run.json"
     ok(run_script(p, "new_run.py", "write"))
     failed(run_script(p, "changed_files.py", "check", "ac-test-writer"), 1, "no snapshot")
+    assert marker.is_file()  # a usage error keeps the active run
     ok(run_script(p, "changed_files.py", "snapshot"))
     write(p / AC / "StepDefinitions/F002/Fix.cs")
     write(p / AC / "Support/Shared/Ctx.cs")
@@ -249,15 +251,22 @@ def test_changed_files_allowlist(git_project):
     write(p / ".workflow/guard.log")
     out = ok(run_script(p, "changed_files.py", "check", "ac-test-writer"))
     assert "OUTSIDE" not in out and "bin/Debug" not in out and "guard.log" not in out
+    assert not marker.exists()  # the run is over
 
+    ok(run_script(p, "new_run.py", "write"))  # run-002, created before the snapshot
+    ok(run_script(p, "changed_files.py", "snapshot"))
     write(p / "src/App.Core/Leak.cs")
     write(p / AC / "Bindings/x.cs")  # not a build folder: must be seen
-    write(p / S1 / "ac/runs/run-002/writer-report.md")  # another run's report
+    write(p / S1 / "ac/runs/run-003/writer-report.md")  # another run's report
     result = run_script(p, "changed_files.py", "check", "ac-test-writer")
     failed(result, 1, "isolation breach, 3 file(s)")
     breaches = {line.split(": ", 1)[1].split()[0] for line in result.stdout.splitlines() if "OUTSIDE ALLOWLIST" in line}
-    assert breaches == {"src/App.Core/Leak.cs", f"{AC}/Bindings/x.cs", f"{S1}/ac/runs/run-002/writer-report.md"}
+    assert breaches == {"src/App.Core/Leak.cs", f"{AC}/Bindings/x.cs", f"{S1}/ac/runs/run-003/writer-report.md"}
+    assert not marker.exists()  # deleted on a breach too
+
+    ok(run_script(p, "new_run.py", "write"))
     failed(run_script(p, "changed_files.py", "check", "ac-test-fail-judge"), 1, "active run is for ac-test-writer")
+    assert marker.is_file()
 
 
 def test_changed_files_feature_files_and_ignored_folders(git_project):
@@ -282,6 +291,8 @@ def test_changed_files_translator(git_project):
     write(p / AC / "Features/F001/A.feature")
     write(p / S1 / "ac/runs/translate-001/translation-report.md")
     ok(run_script(p, "changed_files.py", "check", "ac-feature-translator"))
+    ok(run_script(p, "new_run.py", "translate"))
+    ok(run_script(p, "changed_files.py", "snapshot"))
     write(p / AC / "Features/F002/B.feature")
     write(p / AC / "Features/F001/Steps.cs")
     result = run_script(p, "changed_files.py", "check", "ac-feature-translator")
@@ -540,7 +551,229 @@ def test_export_refs_needs_config(project):
 
 def test_installed_layout_has_every_script(project):
     names = sorted(p.name for p in (project / EXTENSION / "scripts").glob("*.py"))
-    assert names == ["ac_feature.py", "ac_lock.py", "aclib.py", "changed_files.py", "check_features.py",
-                     "clear_generated.py", "export_refs.py", "extract_feedback.py", "new_analyze.py", "new_run.py",
-                     "record_skips.py", "summarize_trx.py"]
+    assert names == ["ac_feature.py", "ac_lock.py", "aclib.py", "changed_files.py", "check_acceptance.py",
+                     "check_features.py", "clear_generated.py", "export_refs.py", "extract_feedback.py",
+                     "new_analyze.py", "new_run.py", "record_skips.py", "summarize_trx.py", "task_message.py"]
     assert CONFIG["acProjectDir"] == AC
+
+
+# ---- task_message.py ---------------------------------------------------------------------------------------------
+
+R1 = f"{S1}/ac/runs"
+BUILD_LINE = f"Allowed build command: {CONFIG['acRefBuildCommand']}"
+EXPECTED_MESSAGES = {
+    "ac-feature-translator": [
+        f"Feature: {S1} (tag F001)", "Run: translate-001", f"Spec: {S1}/spec.md",
+        "Constitution: .specify/memory/constitution.md", "Other spec inputs: docs/domain",
+        f"Acceptance criteria: {S1}/acceptance.md", f"Golden samples: {AC}/Samples/F001/",
+        f"Write feature files to: {AC}/Features/F001/", BUILD_LINE,
+        f"Write your report to: {R1}/translate-001/translation-report.md"],
+    "ac-test-writer": [
+        f"Feature: {S1} (tag F001)", "Run: run-001", f"Spec: {S1}/spec.md",
+        "Constitution: .specify/memory/constitution.md", "Other spec inputs: docs/domain",
+        f"Acceptance criteria (context only): {S1}/acceptance.md", f"AC test project: {AC}/",
+        f"Project file: {AC}/App.AcceptanceTests.csproj", "Test framework: xunit3",
+        f"Feature files: {AC}/Features/F001/", f"Golden samples: {AC}/Samples/F001/",
+        f"Write step definitions to: {AC}/StepDefinitions/F001/", f"Feature support: {AC}/Support/F001/",
+        f"Shared support: {AC}/Support/Shared/", "Public API listings: artifacts/refs/api/", BUILD_LINE,
+        f"Feedback to address: {R1}/run-001/input-feedback.md",
+        f"Write your report to: {R1}/run-001/writer-report.md"],
+    "ac-test-fail-judge": [
+        f"Current feature: {S1} (tag F001)", "Run: run-001", "Analyze: analyze-1",
+        f"Feature folders: {S1} (F001), {S2} (F002)", "Constitution: .specify/memory/constitution.md",
+        "Other spec inputs: docs/domain", f"AC test project: {AC}/", "Public API listings: artifacts/refs/api/",
+        f"Writer report: {R1}/run-001/writer-report.md", f"Test results: {R1}/run-001/analyze-1/ac-results.md",
+        f"Write your report to: {R1}/run-001/analyze-1/judge-report.md"],
+}
+
+
+def start(project, role, feedback=False):
+    """The run scripts a command runs before task_message.py."""
+    if role == "ac-feature-translator":
+        ok(run_script(project, "new_run.py", "translate", "--feature", "F001"))
+        return
+    ok(run_script(project, "new_run.py", "write", "--feature", "F001"))
+    if feedback:
+        write(project / R1 / "run-001/input-feedback.md")
+    if role == "ac-test-fail-judge":
+        ok(run_script(project, "new_analyze.py", "--feature", "F001"))
+
+
+def marker_json(project):
+    return json.loads((project / ".workflow/active-run.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("role", list(EXPECTED_MESSAGES))
+def test_task_message(project, role):
+    start(project, role, feedback=True)
+    out = ok(run_script(project, "task_message.py", "--feature", "F001"))
+    assert out.rstrip("\n").split("\n") == EXPECTED_MESSAGES[role]
+    marker = marker_json(project)
+    assert marker["taskMessage"] == "\n".join(EXPECTED_MESSAGES[role])
+    assert marker["role"] == role and marker["feature"] == S1  # the rest of the marker is kept
+
+
+@pytest.mark.parametrize("role", ["ac-feature-translator", "ac-test-writer"])
+def test_task_message_drops_optional_lines(tmp_path, role):
+    project = make_project(tmp_path / "proj", config={**CONFIG, "specInputs": []}).resolve()
+    start(project, role)  # no input-feedback.md
+    lines = ok(run_script(project, "task_message.py", "--feature", "F001")).rstrip("\n").split("\n")
+    expected = [line for line in EXPECTED_MESSAGES[role]
+                if not line.startswith(("Other spec inputs:", "Feedback to address:"))]
+    assert lines == expected
+
+
+def test_task_message_feature_list_is_lazy(project):
+    """A stray folder under specs/ fails only the judge's message (the only one with <FEATURE_LIST>)."""
+    write(project / "specs/notes/readme.md")
+    start(project, "ac-test-writer")
+    ok(run_script(project, "task_message.py", "--feature", "F001"))
+    ok(run_script(project, "new_analyze.py", "--feature", "F001"))
+    failed(run_script(project, "task_message.py", "--feature", "F001"), 1, "specs/notes")
+
+
+def test_task_message_errors(project):
+    failed(run_script(project, "task_message.py"), 1, "No active run")
+    start(project, "ac-test-writer")
+    failed(run_script(project, "task_message.py", "--feature", "F002"), 1, f"the active run is for {S1}")
+    agent = project / EXTENSION / "agents/ac-test-writer.md"
+    text = agent.read_text(encoding="utf-8")
+    agent.write_text(text.replace("Test framework: <TEST_FRAMEWORK>", "Test framework: <TEST_RUNNER>"),
+                     encoding="utf-8", newline="\n")
+    failed(run_script(project, "task_message.py"), 1, "unknown placeholder <TEST_RUNNER>")
+    agent.write_text(text.replace("## Your task message", "## Task"), encoding="utf-8", newline="\n")
+    failed(run_script(project, "task_message.py"), 1, "no `## Your task message` section")
+    agent.unlink()
+    failed(run_script(project, "task_message.py"), 1, "agent file .specify/extensions/ac/agents/ac-test-writer.md")
+    assert "taskMessage" not in marker_json(project)
+
+
+# ---- check_acceptance.py ---------------------------------------------------------------------------------------
+
+SPEC = """# Feature Specification: Alpha
+
+<!-- a template comment with **FR-999**: not a requirement -->
+
+## User Scenarios & Testing
+
+### User Story 1 - Convert (Priority: P1)
+
+**Acceptance Scenarios**:
+
+1. **Given** a, **When** b, **Then** c
+2. **Given** a, **When** d, **Then** e
+3. **Given** a, **When** f, **Then** g
+
+### Edge Cases
+
+1. not a scenario
+
+## Requirements
+
+- **FR-001**: System MUST convert.
+- **FR-002**: System MUST reject.
+"""
+
+ACCEPTANCE = """# Acceptance criteria: Alpha
+
+## Coverage
+
+| Requirement / scenario | AC items | Note |
+|---|---|---|
+| US1-AS3 | — | Not testable through the API: only visible in the CLI |
+
+## Acceptance criteria
+
+### AC-001 (FR-001; US1-AS1) Converts
+
+- Given the amount 10.50 EUR
+- When it is converted to USD
+- Then the result is 11.34 USD
+
+### AC-002 (FR-002, US1-AS2) Rejects
+
+- **Given** the amount -1 EUR
+- **When** it is converted to USD
+- **Then** the error is "negative amount"
+- Golden sample: `rates.json`
+"""
+
+
+@pytest.fixture
+def acceptance(project):
+    write(project / S1 / "spec.md", SPEC)
+    write(project / S1 / "acceptance.md", ACCEPTANCE)
+    write(project / AC / "Samples/F001/rates.json", "{}\n")
+    return project
+
+
+def check_acceptance(project):
+    return run_script(project, "check_acceptance.py", "--feature", "F001")
+
+
+def test_check_acceptance_passes(acceptance):
+    out = ok(check_acceptance(acceptance))
+    assert "OK: 2 item(s); 2 FR and 2 scenario(s) covered, 1 not testable" in out
+
+
+@pytest.mark.parametrize("change, finding", [
+    (("### AC-002 (FR-002, US1-AS2) Rejects", "### AC2 Rejects"), "line 17: item heading is not"),
+    (("### AC-002 (FR-002, US1-AS2)", "### AC-001 (FR-002, US1-AS2)"), "AC-001: duplicate id"),
+    (("### AC-002 (FR-002, US1-AS2)", "### AC-002 ()"), "AC-002: no references"),
+    (("FR-002, US1-AS2", "FR-002, US1-AS9"), "AC-002: reference US1-AS9 is not in spec.md"),
+    (("FR-002, US1-AS2", "FR-002, US1-AS2, FR-999"), "AC-002: reference FR-999 is not in spec.md"),
+    (("- When it is converted to USD\n", ""), "AC-001: no `When` line"),
+    (("- **Then** the error", "- **And** the error"), "AC-002: no `Then` line"),
+    (("FR-002, US1-AS2", "US1-AS2"), "FR-002: not covered by any AC item"),
+    (("FR-001; US1-AS1", "FR-001"), "US1-AS1: not covered by any AC item and not listed as not testable"),
+    (("Not testable through the API: only visible in the CLI", "Not testable through the API:"),
+     "US1-AS3: not covered"),
+    (("`rates.json`", "`missing.json`"), "AC-002: golden sample missing.json not found"),
+    (("`rates.json`", "`../secret.json`"), "AC-002: golden sample ../secret.json must be a file name"),
+    (("## Acceptance criteria", "## Criteria"), "no `## Acceptance criteria` section"),
+])
+def test_check_acceptance_findings(acceptance, change, finding):
+    write(acceptance / S1 / "acceptance.md", ACCEPTANCE.replace(*change))
+    result = check_acceptance(acceptance)
+    failed(result, 1, "problem(s) in specs/001-alpha/acceptance.md")
+    assert finding in result.stdout
+
+
+def test_check_acceptance_fr_cannot_be_marked_not_testable(acceptance):
+    text = ACCEPTANCE.replace("FR-002, US1-AS2", "US1-AS2").replace(
+        "| US1-AS3 |", "| FR-002 | — | Not testable through the API: internal |\n| US1-AS3 |")
+    write(acceptance / S1 / "acceptance.md", text)
+    result = check_acceptance(acceptance)
+    failed(result, 1)
+    assert "FR-002: not covered by any AC item" in result.stdout
+
+
+def test_check_acceptance_missing_files(acceptance):
+    (acceptance / S1 / "acceptance.md").unlink()
+    failed(check_acceptance(acceptance), 1, f"{S1}/acceptance.md not found")
+
+
+def test_acceptance_template_passes_against_a_matching_spec(acceptance):
+    """The shipped template is structurally valid (placeholders aside), so the drafting phase starts from a file
+    the check understands."""
+    template = (PAYLOAD / "templates/acceptance-template.md").read_text(encoding="utf-8")
+    write(acceptance / S1 / "acceptance.md", template)
+    out = ok(check_acceptance(acceptance))
+    assert "OK: 2 item(s); 2 FR and 2 scenario(s) covered, 1 not testable" in out
+    assert "Not testable through the API" in template and "cannot be marked" in template
+
+
+# ---- summarize_trx.py --only-current ------------------------------------------------------------------------------
+
+def test_summarize_trx_only_current(trx_project):
+    p = trx_project
+    out = ok(run_script(p, "summarize_trx.py", "ac-results.trx", "ac-results.md", "--current", "F002",
+                        "--only-current"))
+    assert "current F002: passed 0, failed 1, pending 1, skipped 0; regression: passed 2, failed 1" in out
+    md = (p / "ac-results.md").read_text(encoding="utf-8")
+    current, regression = md.split("## Regression (other features)")
+    assert "Only in beta" in current
+    assert "Login fails" not in regression and "Expected 1 but was 2" not in regression
+    assert "Not part of this analysis (--current): 3 result(s) of other features" in regression
+    assert "not passed: F001/AC-002." in regression
+    failed(run_script(p, "summarize_trx.py", "ac-results.trx", "x.md", "--only-current"), 1, "needs --current")

@@ -7,13 +7,15 @@ the project and in its worktree, then runs the guard.
 """
 
 import json
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
 import pytest
 
 from acproject import (AC, BUILD, CONFIG, FEATURE_FOLDERS, feature_setup, feature_tag, make_project,
-                       run_guard, write)
+                       run_guard, run_script, write)
 
 T, W, J, MAIN = "ac-feature-translator", "ac-test-writer", "ac-test-fail-judge", None
 ALLOW, DENY = 0, 2
@@ -462,3 +464,92 @@ def test_config_paths_are_normalised(tmp_path):
     code, reason = call(project, MAIN, "Read", {"file_path": str(project / AC / "StepDefinitions/F001/A.cs")})
     assert code == DENY and "must not look at AC step definitions" in reason
     assert call(project, MAIN, "Write", {"file_path": str(project / "artifacts/refs/api/A.cs")})[0] == DENY
+
+
+# ---- AC subagent launches (S04-R07) -----------------------------------------------------------------------------
+
+def launch(project, subagent_type, prompt, tool="Agent", **extra):
+    """A main-agent call that starts a subagent."""
+    payload = {"tool_name": tool, "hook_event_name": "PreToolUse", "cwd": str(project),
+               "tool_input": {"description": "AC run", "prompt": prompt, "subagent_type": subagent_type, **extra}}
+    return run_guard(project, payload)
+
+
+@pytest.fixture
+def writer_run(tmp_path):
+    """A project whose writer run was started by the scripts, as the command does; returns (project, message)."""
+    project = make_project(tmp_path / "proj").resolve()
+    for args in (("new_run.py", "write"), ("task_message.py",)):
+        result = run_script(project, *args)
+        assert result.returncode == 0, result.stderr
+    return project, result.stdout
+
+
+def test_launch_with_the_recorded_message_is_allowed(writer_run):
+    """Regression: the writer's message names StepDefinitions/ and Support/, which the main agent's text rule
+    denies in any other call."""
+    project, message = writer_run
+    assert f"{AC}/StepDefinitions/F001/" in message
+    assert launch(project, W, message) == (ALLOW, "")
+    assert launch(project, W, message, run_in_background=False) == (ALLOW, "")
+    assert launch(project, W, message.replace("\n", "\r\n").replace("F001/\r", "F001/   \r") + "\n\n")[0] == ALLOW
+    assert launch(project, "  AC-Test-Writer ", message, tool="Task")[0] == ALLOW
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda m: m + "\nNote: the API changed in Calculator.Add.", "not the recorded task message"),
+    (lambda m: m.replace("xunit3", "nunit"), "not the recorded task message"),
+    (lambda m: "Please be careful.\n" + m, "not the recorded task message"),
+    (lambda m: m.replace("\n", " "), "not the recorded task message"),
+])
+def test_launch_with_another_prompt_is_denied(writer_run, change, why):
+    project, message = writer_run
+    code, reason = launch(project, W, change(message))
+    assert code == DENY and why in reason and "exact output of task_message.py" in reason
+
+
+def test_launch_rule_other_denials(writer_run):
+    project, message = writer_run
+    code, reason = launch(project, W, message, run_in_background=True)
+    assert code == DENY and "foreground" in reason
+    assert launch(project, W, {"text": message})[0] == DENY  # not a string
+    code, reason = launch(project, T, message)  # the marker is the writer's
+    assert code == DENY and "No valid active run for ac-feature-translator" in reason
+    marker_file = project / ".workflow/active-run.json"
+    marker = json.loads(marker_file.read_text(encoding="utf-8"))
+    write(marker_file, json.dumps({k: v for k, v in marker.items() if k != "taskMessage"}))
+    code, reason = launch(project, W, message)
+    assert code == DENY and "No task message" in reason
+    marker_file.unlink()
+    assert launch(project, W, message)[0] == DENY
+
+
+def test_other_subagent_types_keep_the_text_rule(writer_run):
+    project, message = writer_run
+    code, reason = launch(project, "general-purpose", message)
+    assert code == DENY and "must not look at AC step definitions" in reason
+    assert launch(project, "Explore", "Summarise specs/001-alpha/spec.md")[0] == ALLOW
+
+
+def test_launch_after_the_check_is_denied(writer_run):
+    """changed_files.py check ends the run: the same launch and the role's own calls are denied afterwards."""
+    if shutil.which("git") is None:
+        pytest.skip("git not available")
+    project, message = writer_run
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    for args in (("changed_files.py", "snapshot"), ("changed_files.py", "check", W)):
+        result = run_script(project, *args)
+        assert result.returncode == 0, result.stderr
+    assert not (project / ".workflow/active-run.json").exists()
+    assert launch(project, W, message)[0] == DENY
+    payload = {"tool_name": "Read", "hook_event_name": "PreToolUse", "cwd": str(project), "agent_type": W,
+               "tool_input": {"file_path": str(project / "specs/001-alpha/spec.md")}}
+    code, reason = run_guard(project, payload)
+    assert code == DENY and "No valid active run" in reason
+
+
+def test_launch_without_config_is_left_to_the_role_rules(tmp_path):
+    """Not initialised: the launch is not checked, but every call of the started role is denied."""
+    project = config_project(tmp_path, None)
+    assert launch(project, W, "anything")[0] == ALLOW
+    assert call(project, W, "Read", {"file_path": str(project / "specs/001-alpha/spec.md")})[0] == DENY

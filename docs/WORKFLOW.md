@@ -142,9 +142,12 @@ a matching marker is denied every call.
    has seen test output — see §6.)
 3. **Subagent prompts are fixed templates.** Commands invoke subagents with an exact prompt that
    contains only a run id and file paths (plus the test framework for the writer). Each agent file
-   defines its template in `## Your task message`; the command fills it in and adds nothing. The main agent adds no explanations, hints, opinions or
-   context. User decisions after a translation are recorded by a script that accepts only AC ids,
-   never free text.
+   defines its template in `## Your task message`; `task_message.py` fills it in, records the result
+   in the active-run marker and prints it, and the command passes that output unchanged. The **guard
+   enforces it**: a main-agent `Agent` call that starts an AC role is denied unless its prompt equals
+   the recorded message (line ends and trailing spaces aside) and it runs in the foreground. The main
+   agent adds no explanations, hints, opinions or context. User decisions after a translation are
+   recorded by a script that accepts only AC ids, never free text.
 4. **Subagents don't load `CLAUDE.md`** (`omitClaudeMd: true`; Claude Code support to be verified in
    step 1), because `CLAUDE.md` may describe the implementation. Consequence: every domain rule the
    tests depend on must be in the spec inputs (§2).
@@ -164,7 +167,12 @@ a matching marker is denied every call.
    AC subagents.
 9. **Every subagent works on one active run.** The run scripts record the feature, run and role in
    `.workflow/active-run.json` right before a subagent starts; the guard pins all of that role's paths
-   to it and denies the role when the marker is missing, for another role or malformed.
+   to it and denies the role when the marker is missing, for another role or malformed. The run ends at
+   `changed_files.py check`, which deletes the marker: afterwards nothing can start or act as an AC
+   role until the next run script. A marker can outlive a command only when the command stops before
+   that check — after `new_analyze.py` when every test passed (no task message: no launch possible),
+   or between `task_message.py` and the check (the same launch stays possible until the next run
+   script overwrites the marker).
 10. **The main agent never starts `/speckit-ac-*` itself.** The deploy step marks those skills
     human-only and the guard blocks a main-agent `Skill` call for them; users type the command.
 
@@ -185,8 +193,11 @@ a matching marker is denied every call.
 - After an API change the writer may make **minimal compile fixes** in other features' step
   definitions, and must list each one in its report ("Cross-feature changes"). A fix that would need
   a new value or a different assertion becomes a pending step `API-CHANGED: <reason>` instead.
-- `/speckit-ac-tests-analyze` runs **all features** by default (`--current` narrows it). Results are
-  grouped "current feature" vs "regression". A failed build reports only error counts and codes.
+- `/speckit-ac-tests-analyze` always runs **all features'** tests. Results are grouped "current
+  feature" vs "regression". `--current` narrows what the judge sees and judges to the current
+  feature: regressions are only counted and named by `F00N/AC-NNN` (a per-feature test filter would
+  need the runner and its filter syntax; not in v1.0). A failed build reports only error counts and
+  codes.
 - Judge verdicts: `TRANSLATION_FAULT`, `TEST_FAULT`, `IMPLEMENTATION_FAULT`, `SPEC_AMBIGUITY`,
   `UNEXPRESSIBLE`, `INCONCLUSIVE`, and `SUPERSEDED` — for regression scenarios only: an earlier
   feature's AC conflicts with the current feature's `spec.md`. For that, the judge reads the failing
@@ -202,7 +213,12 @@ a matching marker is denied every call.
   locked file changed; the user unlocks, edits and re-locks explicitly.
 - Spec drift: `ac_lock.py verify sources` exits **3** when only `spec.md` changed since locking. The
   command then asks the user to confirm the AC still hold (`ac_lock.py confirm-spec sources` re-records
-  the spec hash) or to unlock, edit and re-lock.
+  the spec hash) or to unlock, edit and re-lock. Every command handles the exit codes the same way:
+  0 go on, 1 stop (locks change only on the user's explicit request), 3 ask.
+- `/speckit-ac-tests-analyze` also verifies the existing locks of every other feature: a changed lock
+  stops it (those tests would run against unreviewed AC), spec drift there only warns.
+- `sources` is locked only after the user approves and `check_acceptance.py` passes (ids,
+  references, coverage of every `FR-NNN` and spec scenario, golden samples).
 
 ## 6. Known limits
 
@@ -211,8 +227,13 @@ a matching marker is denied every call.
   `.feature` with Bash or an IDE edit tool. These stay soft rules in `CLAUDE.md`. A main-agent
   `Grep` over the whole repo is blocked only if its `path` points into the AC folders. Bash can also
   write the files the guard denies to the main agent's tools (locks, `runs/`, `<refsDir>`, the
-  active-run marker).
-- The main agent can edit the guard and scripts themselves (`.specify/extensions/ac/`),
+  active-run marker). A marker forged that way also carries the `taskMessage` the launch rule
+  compares with, so it would let the main agent start an AC role with any prompt; the launch rule
+  closes only the tool-call routes.
+- The guard checks an AC launch's `prompt` and `run_in_background`, not its `description` (a short
+  label in the UI). Whether that label reaches the subagent is checked in the live smoke test (step 7).
+- The main agent can edit the guard, the scripts and the installed agent files themselves
+  (`.specify/extensions/ac/`; `agents/*.md` are the source of every task message),
   `.claude/settings.json` (the guard registration) and `.workflow/config.json` (which shapes every
   guard rule; `/speckit-ac-init` must write it, so the guard cannot deny it). `speckit-ac doctor`
   (step 6) checks the installed files' hashes.
