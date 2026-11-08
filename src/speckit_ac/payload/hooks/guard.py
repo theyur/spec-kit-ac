@@ -30,6 +30,7 @@ SCHEMA_VERSION = 1
 STRING_KEYS = ("python", "solution", "acProjectDir", "acProject", "refsDir", "acRefBuildCommand",
                "unitTestCommand", "acTestCommand")
 LIST_KEYS = ("specInputs", "acSurfaceProjects", "unitTestProjects")
+ENUM_KEYS = {"testFramework": ("xunit2", "xunit3", "nunit", "mstest")}
 FEATURE_DIR = re.compile(r"^specs/(\d{3,})-[^/\\]+$")
 TIMESTAMP_NAME = re.compile(r"^\d{8}-\d{6}-")
 RUN_ID = {TRANSLATOR: re.compile(r"^translate-\d{3,}$"), WRITER: re.compile(r"^run-\d{3,}$"),
@@ -113,6 +114,9 @@ def load_config(root):
     for key in LIST_KEYS:
         if not isinstance(cfg.get(key), list) or not all(isinstance(v, str) and v.strip() for v in cfg[key]):
             raise ValueError(f"{CONFIG}: key {key} must be a list of non-empty strings")
+    for key, allowed in ENUM_KEYS.items():
+        if cfg.get(key) not in allowed:
+            raise ValueError(f"{CONFIG}: missing or invalid key {key} (one of {', '.join(allowed)})")
     for key in ("acProjectDir", "refsDir"):
         cfg[key] = relative_clean(cfg[key], key)
     cfg["specInputs"] = [relative_clean(value, "specInputs") for value in cfg["specInputs"]]

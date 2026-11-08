@@ -20,6 +20,7 @@ SCHEMA_VERSION = 1
 STRING_KEYS = ("python", "solution", "acProjectDir", "acProject", "refsDir", "acRefBuildCommand",
                "unitTestCommand", "acTestCommand")
 LIST_KEYS = ("specInputs", "acSurfaceProjects", "unitTestProjects")
+ENUM_KEYS = {"testFramework": ("xunit2", "xunit3", "nunit", "mstest")}
 TRANSLATOR, WRITER, JUDGE = "ac-feature-translator", "ac-test-writer", "ac-test-fail-judge"
 ROLES = (TRANSLATOR, WRITER, JUDGE)
 FEATURE_NAME = re.compile(r"^(\d{3,})-.+$")
@@ -85,6 +86,9 @@ def load_config(root_dir: Path) -> dict:
     for key in LIST_KEYS:
         if not isinstance(cfg.get(key), list) or not all(isinstance(v, str) and v.strip() for v in cfg[key]):
             raise AcError(f"{CONFIG}: key {key} must be a list of non-empty strings")
+    for key, allowed in ENUM_KEYS.items():
+        if cfg.get(key) not in allowed:
+            raise AcError(f"{CONFIG}: missing or invalid key {key} (one of {', '.join(allowed)})")
     cfg["acProjectDir"] = _relative_clean(cfg["acProjectDir"], "acProjectDir")
     cfg["refsDir"] = _relative_clean(cfg["refsDir"], "refsDir")
     cfg["specInputs"] = [_relative_clean(v, "specInputs") for v in cfg["specInputs"]]
@@ -195,6 +199,17 @@ def resolve_feature(root_dir: Path, arg: str | None, cfg: dict) -> Feature:
     if len(same) > 1:
         raise AcError(f"Feature number {digits} is used by more than one folder: {', '.join(same)}")
     return Feature(dir=f"specs/{name}", number=digits, ac_project=cfg["acProjectDir"])
+
+
+def all_features(root_dir: Path, cfg: dict) -> list[Feature]:
+    """Every feature folder directly under specs/, sorted by number. Any folder there that is not a valid v1.0
+    feature folder (timestamp, no number, duplicate number) fails the listing."""
+    specs = root_dir / "specs"
+    folders = sorted(d.name for d in specs.iterdir() if d.is_dir()) if specs.is_dir() else []
+    if _feature_numbering(root_dir) == "timestamp":
+        raise AcError(f".specify/init-options.json uses timestamp feature numbering. {V1_LIMIT}")
+    features = [resolve_feature(root_dir, f"specs/{name}", cfg) for name in folders]
+    return sorted(features, key=lambda f: int(f.number))
 
 
 def add_feature_arg(parser):

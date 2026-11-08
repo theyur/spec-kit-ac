@@ -17,10 +17,10 @@ from their own location (`.specify/extensions/ac/scripts/` → four levels up).
 |---|---|---|
 | `extension.yml` | Extension manifest (id `ac`, commands, optional hooks) | 4 (todo) |
 | `commands/speckit.ac.*.md` | `init`, `translate`, `tests-write`, `tests-analyze`, `critic` | 4 (todo; `init`: 5) |
-| `agents/` | `ac-feature-translator`, `ac-test-writer`, `ac-test-fail-judge` | 3 (todo) |
+| `agents/` | `ac-feature-translator`, `ac-test-writer`, `ac-test-fail-judge`; each defines its task message | 3 (done) |
 | `hooks/guard.py` | Fail-closed `PreToolUse` guard; self-contained, imports no project code | 2 (done) |
 | `scripts/aclib.py` | Shared helper of the scripts: root, config, feature resolution, active-run marker | 2 (done) |
-| `scripts/ac_feature.py` | Prints a feature's paths and tag as JSON (for the commands' prompts) | 2 (done) |
+| `scripts/ac_feature.py` | Prints a feature's paths and tag as JSON (for the commands' prompts); `--all` lists every feature | 2, 3 (done) |
 | `scripts/ac_lock.py` | `lock` / `verify` / `unlock` / `confirm-spec` of a feature's `sources` or `features` | 2 (done) |
 | `scripts/new_run.py`, `new_analyze.py` | Next run / analyze folder of a feature; write the active-run marker | 2 (done) |
 | `scripts/changed_files.py` | Content-hash snapshot and check of a subagent's writes | 2 (done) |

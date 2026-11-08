@@ -444,10 +444,12 @@ def test_missing_config_allows_main_but_not_ac_roles_or_ac_skills(tmp_path):
     json.dumps({**CONFIG, "refsDir": "C:/refs"}),
     json.dumps({**CONFIG, "specInputs": "docs"}),
     json.dumps([CONFIG]),
+    json.dumps({k: v for k, v in CONFIG.items() if k != "testFramework"}),
+    json.dumps({**CONFIG, "testFramework": "xunit"}),
 ], ids=["broken json", "schema 2", "missing key", "acProjectDir with ..", "acProjectDir .", "acProjectDir tests/..",
         "specInputs ./", "specInputs specs", "specInputs a feature", "specInputs contains the AC project",
         "specInputs inside refs", "specInputs .workflow", "absolute refsDir", "specInputs not a list",
-        "not an object"])
+        "not an object", "testFramework missing", "testFramework unknown"])
 def test_invalid_config_blocks_everything(tmp_path, config):
     project = config_project(tmp_path, config)
     code, reason = call(project, MAIN, "Read", {"file_path": str(project / "src/a.cs")})

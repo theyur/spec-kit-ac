@@ -75,6 +75,38 @@ def test_feature_errors(project, setup, arg, text):
     failed(run_script(project, "ac_feature.py", *(["--feature", arg] if arg else [])), 1, text)
 
 
+@pytest.mark.parametrize("config", [
+    {k: v for k, v in CONFIG.items() if k != "testFramework"},
+    {**CONFIG, "testFramework": "xunit"},
+], ids=["missing", "unknown"])
+def test_config_test_framework_invalid(project, config):
+    write(project / ".workflow/config.json", json.dumps(config))
+    failed(run_script(project, "ac_feature.py"), 1, "testFramework")
+
+
+def test_feature_all(project):
+    write(project / "specs/010-gamma/spec.md")
+    write(project / "specs/README.md")  # files under specs/ are not features
+    listing = json.loads(ok(run_script(project, "ac_feature.py", "--all")))
+    assert listing == [{"featureDir": S1, "tag": "F001"}, {"featureDir": S2, "tag": "F002"},
+                       {"featureDir": "specs/010-gamma", "tag": "F010"}]
+
+
+def test_feature_all_empty(tmp_path):
+    project = make_project(tmp_path / "empty", features=()).resolve()
+    assert json.loads(ok(run_script(project, "ac_feature.py", "--all"))) == []
+
+
+def test_feature_all_with_feature_is_usage_error(project):
+    failed(run_script(project, "ac_feature.py", "--all", "--feature", "F001"), 2, "not allowed with")
+
+
+@pytest.mark.parametrize("case", [c for c in FEATURE_FOLDERS if not c[3] and c[2]], ids=lambda c: c[0])
+def test_feature_all_bad_folder(project, case):
+    feature_setup(project, case[2])
+    failed(run_script(project, "ac_feature.py", "--all"), 1, "FAIL")
+
+
 def test_spec_inputs_overlapping_protected_folders_fail(project):
     write(project / ".workflow/config.json", json.dumps({**CONFIG, "specInputs": ["tests"]}))
     failed(run_script(project, "ac_feature.py"), 1, "overlaps tests/App.AcceptanceTests")

@@ -141,7 +141,8 @@ a matching marker is denied every call.
    could leak details by accident. (The *content* of the writer feedback is written by the judge, who
    has seen test output — see §6.)
 3. **Subagent prompts are fixed templates.** Commands invoke subagents with an exact prompt that
-   contains only a run id and file paths. The main agent adds no explanations, hints, opinions or
+   contains only a run id and file paths (plus the test framework for the writer). Each agent file
+   defines its template in `## Your task message`; the command fills it in and adds nothing. The main agent adds no explanations, hints, opinions or
    context. User decisions after a translation are recorded by a script that accepts only AC ids,
    never free text.
 4. **Subagents don't load `CLAUDE.md`** (`omitClaudeMd: true`; Claude Code support to be verified in
@@ -178,15 +179,20 @@ a matching marker is denied every call.
   `specs/NNN-x/ac/runs/{translate-NNN,run-NNN/analyze-K}/`.
 - Tags: a feature tag `@F00N` (added by the translator, enforced by a check script) plus `@AC-NNN`,
   unique within a feature. Reports key on `F00N/AC-NNN`.
-- The writer binds with `[Scope(Tag = "F00N")]`; shared helpers live only in `Support/Shared/`.
+- The writer binds with `[Scope(Tag = "F00N")]` on every `[Binding]` class, writes no
+  `[BeforeTestRun]`/`[AfterTestRun]` hooks (they can't be scoped), and keeps only plain helpers (no
+  bindings) in `Support/Shared/`.
 - After an API change the writer may make **minimal compile fixes** in other features' step
-  definitions, and must list each one in its report.
+  definitions, and must list each one in its report ("Cross-feature changes"). A fix that would need
+  a new value or a different assertion becomes a pending step `API-CHANGED: <reason>` instead.
 - `/speckit-ac-tests-analyze` runs **all features** by default (`--current` narrows it). Results are
   grouped "current feature" vs "regression". A failed build reports only error counts and codes.
 - Judge verdicts: `TRANSLATION_FAULT`, `TEST_FAULT`, `IMPLEMENTATION_FAULT`, `SPEC_AMBIGUITY`,
-  `UNEXPRESSIBLE`, `INCONCLUSIVE`, and `SUPERSEDED` — an earlier feature's AC conflicts with a later
-  feature's `spec.md`. For that, the judge reads the failing scenario's feature spec plus the current
-  feature's spec.
+  `UNEXPRESSIBLE`, `INCONCLUSIVE`, and `SUPERSEDED` — for regression scenarios only: an earlier
+  feature's AC conflicts with the current feature's `spec.md`. For that, the judge reads the failing
+  scenario's feature spec and AC plus the current feature's spec. The judge's feedback to the writer
+  holds only what the current feature's writer can fix (its own scenarios and its cross-feature
+  changes).
 
 ## 5. Locks
 

@@ -25,6 +25,7 @@ CONFIG = {
     "acRefBuildCommand": BUILD,
     "unitTestCommand": "dotnet test --project {project}",
     "acTestCommand": "dotnet test --project {acProject} --no-build --results-directory {analyzeDir}",
+    "testFramework": "xunit3",
 }
 FEATURES = ("001-alpha", "002-beta")
 

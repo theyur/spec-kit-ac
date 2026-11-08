@@ -19,10 +19,12 @@ workflow scripts (`.specify/extensions/ac/`) read it on every call. Design: [DES
 | `acRefBuildCommand` | string | The one Bash command the translator and writer may run: the reference-mode build of the AC project. Compared after collapsing whitespace. | guard, commands |
 | `unitTestCommand` | string | Unit test command; `{project}` is replaced. | commands |
 | `acTestCommand` | string | AC test command; `{acProject}` and `{analyzeDir}` are replaced. | commands |
+| `testFramework` | string | Test framework of the AC project: `xunit2`, `xunit3`, `nunit` or `mstest`. The test writer uses its assertion API. | commands (writer task message) |
 
 Rules checked by the guard and the scripts:
 
-- every key is present, strings are non-empty, lists contain only non-empty strings;
+- every key is present, strings are non-empty, lists contain only non-empty strings, `testFramework`
+  is one of its four values;
 - `acProjectDir`, `refsDir` and every `specInputs` entry are project-relative paths below the root
   (normalised: `./tests\App.AcceptanceTests/` is stored as `tests/App.AcceptanceTests`; empty, `.`,
   absolute, drive-letter and `..` paths are invalid);
@@ -47,14 +49,18 @@ Example:
   "refsDir": "artifacts/refs",
   "acRefBuildCommand": "dotnet build tests/App.AcceptanceTests/App.AcceptanceTests.csproj -p:AcRefMode=true -nologo -v q",
   "unitTestCommand": "dotnet test --project {project}",
-  "acTestCommand": "dotnet test --project {acProject} --no-build --results-directory {analyzeDir}"
+  "acTestCommand": "dotnet test --project {acProject} --no-build --results-directory {analyzeDir}",
+  "testFramework": "xunit3"
 }
 ```
 
 ## Per-feature paths (derived, not configured)
 
 A feature is a folder `specs/NNN-name` directly under `specs/` (≥ 3 digits; v1.0 rejects timestamp
-and custom feature folders). Its tag is `FNNN`. `ac_feature.py` prints all of these as JSON.
+and custom feature folders). Its tag is `FNNN`. `ac_feature.py` prints all of these as JSON; `ac_feature.py --all` lists every
+feature folder with its tag (any folder under `specs/` that is not a valid feature fails the listing).
+The subagents' task messages are filled from these keys and the config: a placeholder `<UPPER_SNAKE>`
+is the key `upperSnake` (see `## Your task message` in each `payload/agents/*.md`).
 
 | Path | Contents |
 |---|---|
