@@ -1,0 +1,5 @@
+bin/
+obj/
+TestResults/
+# Written by Claude Code when a permission prompt is answered with "don't ask again".
+.claude/settings.local.json

@@ -7,8 +7,9 @@ implementation, reviewed and locked; isolated Claude Code subagents translate th
 implementation), and judge every failing test. Isolation is enforced by a fail-closed guard hook and
 deterministic scripts, not only by instructions.
 
-> **Status: pre-release, under construction.** The CLI and the extension are built but not yet run
-> end to end with a live model or released; progress is tracked in
+> **Status: pre-release, under construction.** The CLI and the extension are built and have run end
+> to end once with a live model on a sample project (step 7); not yet dogfooded in a real project or
+> released. Progress is tracked in
 > [docs/steps/TRACKER.md](docs/steps/TRACKER.md).
 
 ## Prerequisites (target project)

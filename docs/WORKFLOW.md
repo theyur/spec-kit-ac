@@ -295,6 +295,12 @@ a matching marker is denied every call.
   checkout, so `verify` fails there. Lock only files saved with LF.
 - The smoke test compares (tool, decision) counts, because `guard.log` holds no paths. A wrongly
   allowed read shows up as a missing `deny`, not by its path.
+- Claude Code may run every AC subagent (and the critic) in the background, even though the
+  commands ask for the foreground (seen in the step 7 live run). The commands rely on the main agent
+  waiting for the subagent's hand-back before `changed_files.py check`, which ends the run; a main
+  agent that went on early would delete the marker and the guard would deny the subagent's next call.
+- On Windows the hook command runs in Git Bash: a hand-edited command with backslashes in a path
+  loses them (`C:\x\python.exe` becomes `C:xpython.exe`). The deployed command uses forward slashes.
 - The critic's "no code reading" rule in stage `ac` is a prompt rule only: the critic runs with
   main-agent permissions, so the guard cannot enforce it.
 - Golden samples are only as strong as their content. A sample that contains none of the inputs
