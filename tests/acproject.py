@@ -70,8 +70,11 @@ def make_project(base: Path, config=CONFIG, features=FEATURES, current="specs/00
     if current is not None:
         write(base / ".specify/feature.json", json.dumps({"feature_directory": current}) + "\n")
     for name in features:
-        for doc in ("spec.md", "acceptance.md", "plan.md", "tasks.md"):
+        for doc in ("spec.md", "plan.md", "tasks.md"):
             write(base / "specs" / name / doc, f"# {name} {doc}\n")
+        # Item headings only: enough for check_features.py, which traces every @AC- tag to one of them.
+        write(base / "specs" / name / "acceptance.md",
+              f"# {name} acceptance.md\n\n" + "".join(f"### AC-00{i} (FR-001) item {i}\n\n" for i in range(1, 6)))
     if isinstance(config, dict):
         write(base / ".workflow/config.json", json.dumps(config, indent=2) + "\n")
     elif isinstance(config, str):

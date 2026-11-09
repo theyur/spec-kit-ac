@@ -507,6 +507,37 @@ def test_spec_input_beside_the_code_is_fine(tmp_path):
     assert call(project, MAIN, "Read", {"file_path": str(project / "README.md")})[0] == ALLOW
 
 
+@pytest.mark.parametrize("change, needle", [
+    ({"acProjectDir": "specs/AC", "acProject": "specs/AC/AC.csproj",
+      "acRefBuildCommand": "dotnet build specs/AC/AC.csproj -p:AcRefMode=true -nologo -v q"}, "overlaps specs"),
+    ({"acProjectDir": ".git/AC", "acProject": ".git/AC/AC.csproj",
+      "acRefBuildCommand": "dotnet build .git/AC/AC.csproj -p:AcRefMode=true -nologo -v q"}, "overlaps .git"),
+    ({"acProject": "src/App.Core/App.Core.csproj"}, "must be a .csproj directly inside acProjectDir"),
+    ({"acRefBuildCommand": "python -c \"print(open('src/App.Core/Login.cs').read())\""},
+     "acRefBuildCommand must be exactly"),
+    ({"acRefBuildCommand": BUILD + " -p:Extra=1"}, "acRefBuildCommand must be exactly"),
+], ids=["AC project in specs", "AC project in .git", "acProject elsewhere", "ref build replaced", "ref build widened"])
+def test_unsafe_ac_project_blocks_everything(tmp_path, change, needle):
+    """Copilot on HT PR 16: an edited config must not move the writer's allowlist or widen its only Bash command."""
+    project = config_project(tmp_path, {**CONFIG, **change})
+    code, reason = call(project, MAIN, "Read", {"file_path": str(project / "README.md")})
+    assert code == DENY and needle in reason
+
+
+def test_ac_project_inside_or_around_another_project_blocks_everything(tmp_path):
+    project = config_project(tmp_path, CONFIG)
+    write(project / "tests/Tests.csproj", "<Project />\n")  # a project folder above the AC project
+    code, reason = call(project, MAIN, "Read", {"file_path": str(project / "README.md")})
+    assert code == DENY and "lies inside the project folder tests" in reason
+    (project / "tests/Tests.csproj").unlink()
+    write(project / AC / "Support/Shared/Nested/Nested.csproj", "<Project />\n")
+    code, reason = call(project, MAIN, "Read", {"file_path": str(project / "README.md")})
+    assert code == DENY and "contains another project" in reason
+    (project / AC / "Support/Shared/Nested/Nested.csproj").unlink()
+    write(project / AC / "obj-ref/Copy.csproj", "<Project />\n")  # build output is fine
+    assert call(project, MAIN, "Read", {"file_path": str(project / "README.md")})[0] == ALLOW
+
+
 def test_refs_dir_in_a_project_folder_blocks_everything(tmp_path):
     """Copilot on HT PR 16: export_refs.py deletes refsDir, so it must not overlap a project folder."""
     project = config_project(tmp_path, {**CONFIG, "refsDir": "lib/Core/refs"})

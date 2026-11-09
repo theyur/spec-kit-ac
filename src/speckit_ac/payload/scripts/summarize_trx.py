@@ -6,6 +6,7 @@ segment of its class name (the generated namespace follows the Features/FNNN/ fo
 name, marked ambiguous when two features have a scenario of that name. Stack frames outside the AC project are hidden.
 With --current, results are split into "Current feature" and "Regression" (all other features); --only-current
 reduces the regression section to one line of counts and the F00N/AC-NNN keys of the results that did not pass.
+Fails (exit 1) when the TRX holds no result, or none of the --current feature: no test ran is never a pass.
 """
 import argparse
 import re
@@ -167,6 +168,9 @@ def main():
     cfg = aclib.load_config(root)
     ac_dir = (root / cfg["acProjectDir"]).resolve()
     tests = read_tests(args.trx, ac_dir)
+    # No result is never "everything passed": no AC test ran (an empty feature set, a filter, a runner problem).
+    if not tests:
+        raise aclib.AcError(f"{args.trx} holds no test results: no AC test ran")
 
     lines = ["# AC results", ""]
     if args.current:
@@ -174,6 +178,8 @@ def main():
         if not FEATURE_SEGMENT.match(current):
             raise aclib.AcError(f"--current must be a feature tag like F001: {args.current}")
         mine = [t for t in tests if t["feature"] == current]
+        if not mine:
+            raise aclib.AcError(f"{args.trx} holds no result of the current feature {current}: none of its AC tests ran")
         others = [t for t in tests if t["feature"] != current]
         body, counts = section(mine, 3)
         lines += [f"## Current feature ({current})", "", *body, ""]

@@ -117,6 +117,8 @@ def test_spec_inputs_overlapping_protected_folders_fail(project):
     ({"refsDir": AC}, f"refsDir {AC} overlaps {AC}"),
     ({"acSurfaceProjects": ["../../other/Secret.csproj"]}, "key acSurfaceProjects must be a project-relative path"),
     ({"solution": "C:/elsewhere/App.slnx"}, "key solution must be a project-relative path"),
+    ({"acProject": "src/App.Core/App.Core.csproj"}, "must be a .csproj directly inside acProjectDir"),
+    ({"acRefBuildCommand": "dotnet build src/App.Core/App.Core.csproj"}, "acRefBuildCommand must be exactly"),
 ])
 def test_unsafe_config_paths_fail(project, change, message):
     """Copilot on HT PR 16: export_refs.py deletes refsDir; dotnet must never get a path outside the checkout."""
@@ -380,6 +382,9 @@ def test_check_features_other_f_tags_are_not_feature_tags(project):
     (GOOD.replace("  @AC-002\n", ""), "needs exactly one @AC- tag"),
     (GOOD.replace('    When "ann" logs in with "pw"\n', ""), "needs a When and a Then"),
     (GOOD.replace("    Then the login succeeds", "    Thn the login succeeds"), "not a Gherkin step"),
+    # Copilot on HT PR 16: every tag traces to a reviewed item of the feature's acceptance.md
+    (GOOD.replace("@AC-002", "@AC-not-an-id"), "@AC-not-an-id is not an AC id"),
+    (GOOD.replace("@AC-002", "@AC-999"), "@AC-999 is not an item of specs/001-alpha/acceptance.md"),
 ])
 def test_check_features_problems(project, text, problem):
     failed(check(project, text), 1, problem)
@@ -495,6 +500,17 @@ def trx_project(project):
     trx = project / "ac-results.trx"
     write(trx, TRX.replace("{ac}", str(project / AC)).replace("{root}", str(project)))
     return project
+
+
+def test_summarize_trx_without_results_fails(trx_project):
+    """Copilot on HT PR 16: zero results must never read as "every test passed"."""
+    p = trx_project
+    write(p / "empty.trx", '<?xml version="1.0"?><TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/'
+                           '2010"><Results /></TestRun>')
+    failed(run_script(p, "summarize_trx.py", "empty.trx", "ac-results.md"), 1, "no test results")
+    failed(run_script(p, "summarize_trx.py", "ac-results.trx", "ac-results.md", "--current", "F003"), 1,
+           "no result of the current feature F003")
+    assert not (p / "ac-results.md").exists()
 
 
 def test_summarize_trx(trx_project):
@@ -615,6 +631,10 @@ def test_internals_visible_to_found_in_folders_named_like_build_output(export_re
         with pytest.raises(SystemExit, match=f"src/Core/{folder}/Friends.cs"):
             export_refs.check_no_internals_visible_to(project)
         (tmp_path / f"src/Core/{folder}/Friends.cs").unlink()
+    # Copilot on HT PR 16: Windows file names keep their case (Steps.CS)
+    (tmp_path / "src/Core/Friends.CS").write_text('[assembly: InternalsVisibleTo("T")]', encoding="utf-8")
+    with pytest.raises(SystemExit, match="src/Core/Friends.CS"):
+        export_refs.check_no_internals_visible_to(project)
 
 
 def test_export_refs_needs_config(project):

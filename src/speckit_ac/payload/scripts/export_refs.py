@@ -56,7 +56,7 @@ def with_dependencies(projects):
 
 def check_no_internals_visible_to(project):
     folder = project.parent
-    candidates = [f for f in folder.rglob("*") if f.suffix in (".cs", ".csproj", ".props", ".targets")
+    candidates = [f for f in folder.rglob("*") if f.suffix.lower() in (".cs", ".csproj", ".props", ".targets")
                   and not any(BUILD_FOLDER.match(s) for s in f.relative_to(folder).parts[:-1])]
     candidates += [ROOT / n for n in ("Directory.Build.props", "Directory.Build.targets") if (ROOT / n).is_file()]
     hits = [f.relative_to(ROOT).as_posix() for f in candidates

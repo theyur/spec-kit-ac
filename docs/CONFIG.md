@@ -61,9 +61,17 @@ Rules checked by the guard and the scripts:
 
 - every key is present, strings are non-empty, lists contain only non-empty strings, `testFramework`
   is one of its four values;
-- `acProjectDir`, `refsDir` and every `specInputs` entry are project-relative paths below the root
-  (normalised: `./tests\App.AcceptanceTests/` is stored as `tests/App.AcceptanceTests`; empty, `.`,
-  absolute, drive-letter and `..` paths are invalid);
+- `solution`, `acProjectDir`, `acProject`, `refsDir` and every `specInputs`, `acSurfaceProjects` and
+  `unitTestProjects` entry are project-relative paths below the root (normalised:
+  `./tests\App.AcceptanceTests/` is stored as `tests/App.AcceptanceTests`; empty, `.`, absolute,
+  drive-letter and `..` paths are invalid);
+- `acProjectDir` must not overlap `specs/`, `.specify/`, `.workflow/` or `.git/`, lie inside another
+  project folder or contain one (build output aside). `acProject` is a `.csproj` directly inside it,
+  and `acRefBuildCommand` is exactly `dotnet build <acProject> -p:AcRefMode=true -nologo -v q`.
+  Otherwise an edited config would move the writer's allowlist or widen the AC roles' only Bash command;
+- `refsDir` must not overlap `specs/`, `.specify/`, `.workflow/`, `.git/`, `acProjectDir` or an
+  implementation folder (a `.csproj` at the root itself aside): `export_refs.py` deletes it before
+  every export;
 - a `specInputs` entry must not equal, contain or lie inside `specs/`, `.specify/`, `.workflow/`,
   `acProjectDir` or `refsDir` (it would hand the AC subagents `plan.md`, step definitions or locks),
   nor an implementation folder: `src/` or any folder that holds a `.csproj` (outside `bin/` / `obj/`).

@@ -5,6 +5,7 @@ build passes and the scenario has no steps, and a scenario without steps passes.
 - a scenario with no step, or without both a When and a Then step (counting And/But after them, and Background),
 - description text inside a scenario after its first step, or any non-keyword line between Scenario and its first step,
 - a scenario without an @AC- tag, or an @AC- id used by two scenarios of the feature,
+- an @AC- tag that is not @AC-<digits> or not an item (`### AC-NNN …`) of the feature's acceptance.md,
 - a file whose Feature-level tags do not include the feature tag @FNNN, or that carries another @F<digits> tag,
 - no .feature file at all.
 Usage: check_features.py [--feature …]
@@ -20,6 +21,14 @@ import aclib  # noqa: E402
 STEP = re.compile(r"^(Given|When|Then|And|But|\*)\s")
 SCENARIO = re.compile(r"^(Scenario|Scenario Outline|Scenario Template|Example):")
 FEATURE_TAG = re.compile(r"^@F\d+$")
+AC_TAG = re.compile(r"^@(AC-\d{3,})$")
+AC_ITEM = re.compile(r"^###\s+(AC-\d{3,})\b", re.MULTILINE)  # an item heading in acceptance.md
+COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def acceptance_ids(path: Path) -> set:
+    """The AC ids defined in acceptance.md (`### AC-NNN …` headings, HTML comments ignored)."""
+    return set(AC_ITEM.findall(COMMENT.sub("", path.read_text(encoding="utf-8")))) if path.is_file() else set()
 
 
 def check_file(feature_file, name, tag, problems, ids):
@@ -90,7 +99,14 @@ def main():
     problems, ids = [], {}
     for feature_file in files:
         check_file(feature_file, aclib.rel_posix(root, feature_file), feature.tag, problems, ids)
+    # Every scenario traces to a reviewed acceptance item (Copilot on HT PR 16): `@AC-<digits>`, defined in acceptance.md.
+    known = acceptance_ids(feature.path(root, "acceptance"))
     for ac, places in sorted(ids.items()):
+        match = AC_TAG.match(ac)
+        if not match:
+            problems.append(f"{ac} is not an AC id (@AC-NNN): {', '.join(places)}")
+        elif match[1] not in known:
+            problems.append(f"{ac} is not an item of {feature.paths()['acceptance']}: {', '.join(places)}")
         # A Scenario Outline is one scenario; the same id on two scenarios means one AC item was split or duplicated.
         if len(places) > 1:
             problems.append(f"{ac} is used by {len(places)} scenarios: {', '.join(places)}")

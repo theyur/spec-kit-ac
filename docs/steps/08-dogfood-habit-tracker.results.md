@@ -167,6 +167,46 @@ are fixed here and one in part; one is a false positive.
 The spec-input finding from the first review is listed as open again, with no new comment. The fix from round 1
 stands, with its tests.
 
+## Copilot third review on PR 16 (head `5b16a7d`)
+
+Copilot marked 5 findings resolved and kept 2 open (the project/solution paths and `refsDir`). It raised 11 it had
+missed before, all in code unchanged since the first review. The user chose to fix the 7 real ones.
+
+**Fixed:**
+
+1. **Empty TRX read as "every test passed" (high).** `summarize_trx.py` now fails when the TRX holds no result, or
+   none of the `--current` feature. tests-analyze stops there with `changed_files.py clear`. New test.
+2. **`acProjectDir` / `acProject` unchecked (high).** This came as two findings, one for the guard and one for aclib.
+   - Both validators now reject an AC folder that overlaps `specs/`, `.specify/`, `.workflow/` or `.git/`, lies
+     inside another project folder, or contains one (build output aside).
+   - `acProject` must be a `.csproj` directly inside the AC folder.
+   - This also closes the two still-open threads. New tests.
+3. **`acRefBuildCommand` was any string (high).** It must now be exactly
+   `dotnet build <acProject> -p:AcRefMode=true -nologo -v q`. `aclib.ac_ref_build_command` is shared with
+   `init_config.py`, and the guard repeats the rule. New tests.
+4. **`@AC-` tags not traced to acceptance items (medium).** `check_features.py` requires `@AC-<digits>` and an id
+   that is an item heading (`### AC-NNN …`) of the feature's `acceptance.md`.
+   - `init_verify.py`'s temporary acceptance file now lists the three ids its feature uses. The shared test fixture
+     got item headings too.
+   - New cases.
+5. **Case-sensitive extensions in the `InternalsVisibleTo` scan (low).** `Steps.CS` is now found. Test extended.
+6. **HT: no setting disabled xUnit parallelization, although ADR 0003 requires sequential runs (medium).**
+   - `tests/HT.AcceptanceTests/xunit.runner.json` sets `parallelizeTestCollections: false`, and the `.csproj` copies
+     it to the output.
+   - Verified in a scratch xUnit 2.9.3 / VSTest 3.1.4 project with diagnostics on: "parallel test collections =
+     off", against "on [24 threads]" without it.
+
+**Not changed:**
+
+- **Judge check reports the TRX and results files as outside the allowlist: false positive.** The judge's snapshot
+  is taken in step 9 (Rules steps 2–5), after the build, the test run and `summarize_trx.py`. The step 7 live
+  run's judge checks passed.
+- **Main-agent Bash `cat …/./StepDefinitions/…`: documented limit.** WORKFLOW §6 already says the main agent can
+  reach step definitions with Bash without naming them; this is a soft rule.
+- **`new_run.py` / `new_analyze.py` overwrite an existing marker: by design.** WORKFLOW §3.9 makes the next run
+  script the recovery path for an interrupted run. Refusing would change the step 4 marker design. That is
+  deferred to a decision with the user, and it matters more now that subagents run in the background.
+
 ## Not covered
 
 - A Habit Tracker feature through the flow (out of scope; the first feature is course work). In particular, the

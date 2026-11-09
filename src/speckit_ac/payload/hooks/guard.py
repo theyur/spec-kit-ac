@@ -141,6 +141,7 @@ def load_config(root):
         cfg[key] = relative_clean(cfg[key], key)
     for key in ("specInputs", "acSurfaceProjects", "unitTestProjects"):
         cfg[key] = [relative_clean(value, key) for value in cfg[key]]
+    check_ac_project(root, cfg)
     # export_refs.py deletes refsDir before every export, so it must hold nothing else (same rule as aclib).
     for folder in ("specs", ".specify", ".workflow", ".git", cfg["acProjectDir"]):
         if overlaps(cfg["refsDir"], folder):
@@ -169,6 +170,32 @@ def overlaps(a, b):
 
 
 BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)
+
+
+def check_ac_project(root, cfg):
+    """Same rule as aclib.check_ac_project: the AC project is a folder of its own, outside the spec-kit folders and
+    every other project folder, its .csproj directly inside, and the ref build is exactly the generated command.
+    Otherwise a hand-edited config would move the writer's allowlist or widen the AC roles' only Bash command."""
+    ac, project = cfg["acProjectDir"], cfg["acProject"]
+    for folder in ("specs", ".specify", ".workflow", ".git"):
+        if overlaps(ac, folder):
+            raise ValueError(f"{CONFIG}: acProjectDir {ac} overlaps {folder}")
+    if posixpath.dirname(project) != ac or not project.lower().endswith(".csproj"):
+        raise ValueError(f"{CONFIG}: acProject {project} must be a .csproj directly inside acProjectDir {ac}")
+    expected = f"dotnet build {project} -p:AcRefMode=true -nologo -v q"
+    if " ".join(cfg["acRefBuildCommand"].split()) != expected:
+        raise ValueError(f"{CONFIG}: acRefBuildCommand must be exactly: {expected}")
+    parts = ac.split("/")
+    for depth in range(1, len(parts)):
+        if any(Path(root, *parts[:depth]).glob("*.csproj")):
+            raise ValueError(f"{CONFIG}: acProjectDir {ac} lies inside the project folder {'/'.join(parts[:depth])}")
+    target = Path(root, *parts)
+    if target.is_dir():
+        for csproj in target.rglob("*.csproj"):
+            rel = csproj.parent.relative_to(target).parts
+            if rel and not any(BUILD_FOLDER.match(p) for p in rel):
+                raise ValueError(f"{CONFIG}: acProjectDir {ac} contains another project: "
+                                 f"{csproj.relative_to(Path(root)).as_posix()}")
 
 
 def implementation_overlap(root, value, root_project=True):

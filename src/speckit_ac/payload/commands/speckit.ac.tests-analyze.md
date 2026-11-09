@@ -79,6 +79,8 @@ Follow the steps exactly. Stop at the first failure and report it.
    If `<analyze>/ac-results.trx` does not exist: run `changed_files.py clear`, then stop and report.
 8. Run `summarize_trx.py <analyze>/ac-results.trx <analyze>/ac-results.md --current <tag>`, and add
    `--only-current` when the input contains `--current`. Note the counts it prints.
+   If it fails because no test result exists (none at all, or none of the current feature): run
+   `changed_files.py clear`, then stop and report it. No test ran, which is never a pass.
    If every result passed (pending counts as failed): run `changed_files.py clear`, report the totals
    and the AC ids skipped at translation (`skipped.json` in the current feature's latest
    `translate-NNN` folder, if any), then stop.

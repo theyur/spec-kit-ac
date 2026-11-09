@@ -180,6 +180,19 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
     - `/speckit-ac-tests-analyze` ends its run with the new `changed_files.py clear` when it stops before the judge.
 
     The xunit3/MTP TRX finding was a false positive: the opt-in end-to-end test passes. Details in the results file.
+  - **Copilot third review on PR 16:** 2 still open, 11 new in unchanged code. The user chose to fix the 7 real ones:
+    - an empty TRX fails the analysis;
+    - the AC project folder, `acProject` and `acRefBuildCommand` are validated in aclib and the guard;
+    - `@AC-` tags trace to `acceptance.md` items;
+    - the `InternalsVisibleTo` scan compares extensions case-insensitively;
+    - HT disables xUnit parallelization (`xunit.runner.json`).
+
+    Not changed: the judge allowlist finding was a false positive, the main-agent Bash `/./` path is a documented
+    limit.
+  - **Open decision (user):** should `new_run.py` / `new_analyze.py` refuse to overwrite an existing marker,
+    instead of replacing it (WORKFLOW §3.9)? Copilot raised it. Background subagents make it more relevant.
+  - **Review scope:** Copilot keeps finding issues in code unchanged since the first review. After this round,
+    further package review belongs in spec-kit-ac's own repository (step 9), not the Habit Tracker PR.
   - **Candidate follow-up:** init's spec-input question steered toward `SPEC.md` and away from ADR 0003 (it says
     "describe the domain"). Name test-environment documents as allowed inputs (DESIGN §4 wording).
   - Not observed: a hook timeout on a cold uv start (the cache was warm; the guard took ≈ 0.1–0.3 s per call).

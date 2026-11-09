@@ -40,6 +40,16 @@ ACCEPTANCE = """# Acceptance criteria: speckit-ac init check (temporary)
 - Given a number 2
 - When it is doubled
 - Then the result is 4
+
+### AC-002 (FR-001) Doubling other numbers
+- Given a number 3
+- When it is doubled
+- Then the result is 6
+
+### AC-003 (FR-001) Unbound step
+- Given a step nobody has bound
+- When it is doubled
+- Then the result is 4
 """
 FEATURE = """@F999
 Feature: speckit-ac init check

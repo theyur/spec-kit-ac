@@ -105,6 +105,40 @@ def implementation_overlap(root_dir: Path, value: str, root_project: bool = True
     return None
 
 
+def ac_ref_build_command(ac_project: str) -> str:
+    """The only ref-mode build the translator and the writer may run (init writes it; the guard allows only it)."""
+    return f"dotnet build {ac_project} -p:AcRefMode=true -nologo -v q"
+
+
+def check_ac_project(cfg: dict, root_dir: Path | None, error=None):
+    """The AC project is a folder of its own: outside specs/, .specify/, .workflow/, .git/ and every other project
+    folder, with its .csproj directly inside, built in ref mode only by ac_ref_build_command (the guard repeats this,
+    because a hand-edited config would otherwise move the writer's allowlist or widen its Bash command)."""
+    error = error or AcError
+    ac, project = cfg["acProjectDir"], cfg["acProject"]
+    for folder in ("specs", ".specify", ".workflow", ".git"):
+        if _overlaps(ac, folder):
+            raise error(f"{CONFIG}: acProjectDir {ac} overlaps {folder}")
+    if posixpath.dirname(project) != ac or not project.lower().endswith(".csproj"):
+        raise error(f"{CONFIG}: acProject {project} must be a .csproj directly inside acProjectDir {ac}")
+    if " ".join(cfg["acRefBuildCommand"].split()) != ac_ref_build_command(project):
+        raise error(f"{CONFIG}: acRefBuildCommand must be exactly: {ac_ref_build_command(project)}")
+    if root_dir is None:
+        return
+    parts = ac.split("/")
+    for depth in range(1, len(parts)):
+        folder = "/".join(parts[:depth])
+        if any(root_dir.joinpath(*parts[:depth]).glob("*.csproj")):
+            raise error(f"{CONFIG}: acProjectDir {ac} lies inside the project folder {folder}")
+    target = root_dir.joinpath(*parts)
+    if target.is_dir():
+        for csproj in target.rglob("*.csproj"):
+            rel = csproj.parent.relative_to(target).parts
+            if rel and not any(_BUILD_FOLDER.match(p) for p in rel):
+                raise error(f"{CONFIG}: acProjectDir {ac} contains another project: "
+                            f"{csproj.relative_to(root_dir).as_posix()}")
+
+
 def validate_config(cfg, root_dir: Path | None = None) -> dict:
     """Check a config (schema 1, docs/CONFIG.md) and return it with its paths normalised; AcError if invalid.
     With `root_dir`, spec inputs are also checked against the project's implementation folders."""
@@ -123,6 +157,7 @@ def validate_config(cfg, root_dir: Path | None = None) -> dict:
         cfg[key] = _relative_clean(cfg[key], key)
     for key in PATH_LIST_KEYS:
         cfg[key] = [_relative_clean(v, key) for v in cfg[key]]
+    check_ac_project(cfg, root_dir, AcError)
     # export_refs.py deletes refsDir before every export, so it must hold nothing else.
     for folder in ("specs", ".specify", ".workflow", ".git", cfg["acProjectDir"]):
         if _overlaps(cfg["refsDir"], folder):

@@ -120,7 +120,7 @@ def build(args, root: Path) -> dict:
         "acProjectDir": ac_dir,
         "acProject": ac_project,
         "refsDir": refs,
-        "acRefBuildCommand": f"dotnet build {ac_project} -p:AcRefMode=true -nologo -v q",
+        "acRefBuildCommand": aclib.ac_ref_build_command(ac_project),
         "unitTestCommand": unit,
         "acTestCommand": ac_test,
         "testFramework": args.framework,

@@ -239,7 +239,7 @@ def test_tests_analyze_rules():
     assert "only the number of errors and their codes" in content
     # Copilot on HT PR 16: every stop between new_analyze.py and the judge ends the run (build, no TRX, all passed)
     steps = content.split(" 9. Start the judge", 1)[0].split(" 5. Run `new_analyze.py", 1)[1]
-    assert steps.count("`changed_files.py clear`") == 4  # the rule + the three stops
+    assert steps.count("`changed_files.py clear`") == 5  # the rule + the four stops
     for verdict in ("TRANSLATION_FAULT", "IMPLEMENTATION_FAULT", "TEST_FAULT", "SPEC_AMBIGUITY", "UNEXPRESSIBLE",
                     "SUPERSEDED", "INCONCLUSIVE"):
         assert f"`{verdict}`" in content
