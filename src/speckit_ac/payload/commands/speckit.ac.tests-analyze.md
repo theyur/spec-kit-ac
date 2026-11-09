@@ -36,6 +36,8 @@ Follow the steps exactly. Stop at the first failure and report it.
     edits `acceptance.md`, locks it again and runs `/speckit-ac-translate` again.
 - Starting the judge, always in this order:
   1. `new_analyze.py <feature-arg>` (prints the analyze folder; writes the active-run marker);
+     It refuses while another AC run is active ("An AC run is still active"): stop and report its
+     message. Never end that run yourself; the user does, once no AC subagent is running;
   2. `task_message.py <feature-arg>` — prints the task message;
   3. `changed_files.py snapshot`;
   4. the `Agent` tool with `subagent_type: ac-test-fail-judge`, `run_in_background: false`, and

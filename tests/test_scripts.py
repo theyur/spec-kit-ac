@@ -147,6 +147,8 @@ def test_scripts_print_the_resolved_feature(project, script, args):
     write(project / AC / "Features/F001/Login.feature", GOOD)
     write(project / S1 / "ac/runs/translate-001/translation-report.md", REPORT)
     ok(run_script(project, "new_run.py", "write"))
+    if script in ("new_run.py", "new_analyze.py"):
+        end_run(project)
     out = ok(run_script(project, script, *args))
     assert f"{S1} (F001)" in out
 
@@ -215,6 +217,11 @@ def test_lock_usage_error(project):
 
 # ---- new_run.py / new_analyze.py -------------------------------------------------------------------------------
 
+def end_run(project):
+    """The run is over, as after `changed_files.py check`: a new run script may start (option B, step 8)."""
+    ok(run_script(project, "changed_files.py", "clear"))
+
+
 def marker(project):
     return json.loads((project / ".workflow/active-run.json").read_text(encoding="utf-8"))
 
@@ -224,27 +231,57 @@ def test_runs_and_markers(project):
     assert ok(run_script(project, "new_run.py", "translate")).splitlines()[0] == f"{S1}/ac/runs/translate-001"
     assert marker(project) == {"role": "ac-feature-translator", "feature": S1, "tag": "F001", "run": "translate-001",
                                "analyze": None}
+    failed(run_script(project, "new_run.py", "translate"), 1,
+           f"An AC run is still active (ac-feature-translator translate-001 of {S1}")  # option B: never replaced
+    assert not (project / S1 / "ac/runs/translate-002").exists()  # refused before any folder is created
+    end_run(project)
     assert ok(run_script(project, "new_run.py", "translate")).startswith(f"{S1}/ac/runs/translate-002")
 
+    end_run(project)
     assert ok(run_script(project, "new_run.py", "write")).startswith(f"{S1}/ac/runs/run-001")
     assert marker(project)["role"] == "ac-test-writer" and marker(project)["run"] == "run-001"
+    end_run(project)
     assert ok(run_script(project, "new_analyze.py")).startswith(f"{S1}/ac/runs/run-001/analyze-1")
     assert marker(project) == {"role": "ac-test-fail-judge", "feature": S1, "tag": "F001", "run": "run-001",
                                "analyze": "analyze-1"}
+    end_run(project)
     assert ok(run_script(project, "new_analyze.py")).startswith(f"{S1}/ac/runs/run-001/analyze-2")
 
     write(project / S1 / "ac/runs/run-001/analyze-2/writer-feedback.md", "fix the table\n")
+    end_run(project)
     ok(run_script(project, "new_run.py", "write"))
     assert (project / S1 / "ac/runs/run-002/input-feedback.md").read_text(encoding="utf-8") == "fix the table\n"
 
     # numbering is per feature
+    end_run(project)
     assert ok(run_script(project, "new_run.py", "write", "--feature", "002")).startswith(f"{S2}/ac/runs/run-001")
     assert marker(project)["feature"] == S2 and marker(project)["tag"] == "F002"
 
 
+@pytest.mark.parametrize("content, needle", [
+    (json.dumps({"role": "ac-test-writer", "feature": S1, "tag": "F001", "run": "run-007", "analyze": None}),
+     f"(ac-test-writer run-007 of {S1}; .workflow/active-run.json)"),
+    (json.dumps({"role": "ac-test-writer", "feature": "specs/999-speckit-ac-smoke", "tag": "F999", "run": "run-001",
+                 "analyze": None, "smoke": True}), "`smoke_test.py end <role>`"),
+    ("{broken", "(unreadable marker;"),
+])
+def test_run_scripts_refuse_an_active_run(project, content, needle):
+    """Step 8, option B (user): a run script never replaces another run's marker; a background subagent may still be
+    working on it. The message says how to end the run once nothing is running."""
+    write(project / ".workflow/active-run.json", content)
+    for args in (["new_run.py", "translate"], ["new_run.py", "write"], ["new_analyze.py"]):
+        result = run_script(project, *args)
+        failed(result, 1, "An AC run is still active")
+        assert needle in result.stderr
+    assert not (project / S1 / "ac/runs").exists()  # nothing created
+    assert (project / ".workflow/active-run.json").read_text(encoding="utf-8") == content
+
+
 def test_write_run_without_feedback(project):
     ok(run_script(project, "new_run.py", "write"))
+    end_run(project)
     ok(run_script(project, "new_analyze.py"))
+    end_run(project)
     ok(run_script(project, "new_run.py", "write"))
     assert not (project / S1 / "ac/runs/run-002/input-feedback.md").exists()
 
@@ -297,6 +334,7 @@ def test_changed_files_clear_ends_a_run_without_a_subagent(project):
     marker = project / ".workflow/active-run.json"
     assert "No active run" in ok(run_script(project, "changed_files.py", "clear"))
     ok(run_script(project, "new_run.py", "write"))  # tests-analyze needs a writer run first
+    end_run(project)
     ok(run_script(project, "new_analyze.py"))
     assert marker.is_file()
     assert "Active run ended" in ok(run_script(project, "changed_files.py", "clear")) and not marker.exists()
@@ -694,6 +732,7 @@ def start(project, role, feedback=False):
     if feedback:
         write(project / R1 / "run-001/input-feedback.md")
     if role == "ac-test-fail-judge":
+        end_run(project)  # the writer's run ended at its check
         ok(run_script(project, "new_analyze.py", "--feature", "F001"))
 
 
@@ -726,6 +765,7 @@ def test_task_message_feature_list_is_lazy(project):
     write(project / "specs/notes/readme.md")
     start(project, "ac-test-writer")
     ok(run_script(project, "task_message.py", "--feature", "F001"))
+    end_run(project)
     ok(run_script(project, "new_analyze.py", "--feature", "F001"))
     failed(run_script(project, "task_message.py", "--feature", "F001"), 1, "specs/notes")
 

@@ -161,6 +161,7 @@ def start_run(project, role):
         out = run_script(project, "new_run.py", "write", "--feature", "F001")
         assert out.returncode == 0, out.stderr
         if role == J:
+            (project / ".workflow/active-run.json").unlink()  # the writer's run ended at its check
             out = run_script(project, "new_analyze.py", "--feature", "F001")
     assert out.returncode == 0, out.stderr
     folder = out.stdout.splitlines()[0]

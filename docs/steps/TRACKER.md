@@ -189,8 +189,9 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
 
     Not changed: the judge allowlist finding was a false positive, the main-agent Bash `/./` path is a documented
     limit.
-  - **Open decision (user):** should `new_run.py` / `new_analyze.py` refuse to overwrite an existing marker,
-    instead of replacing it (WORKFLOW §3.9)? Copilot raised it. Background subagents make it more relevant.
+  - **Decided (user, 2026-11-09): option B.** `new_run.py` / `new_analyze.py` refuse while another run's marker
+    exists, instead of replacing it. The three commands stop and report. The user ends an interrupted run with
+    `changed_files.py clear`. Recorded in WORKFLOW §3.9 and the DESIGN decision log.
   - **Review scope:** Copilot keeps finding issues in code unchanged since the first review. After this round,
     further package review belongs in spec-kit-ac's own repository (step 9), not the Habit Tracker PR.
   - **Candidate follow-up:** init's spec-input question steered toward `SPEC.md` and away from ADR 0003 (it says

@@ -35,6 +35,8 @@ Follow the steps exactly. Stop at the first failure and report it.
     edits `acceptance.md`, locks it again and runs this command again.
 - Starting the translator, always in this order:
   1. `new_run.py translate <feature-arg>` (prints the run folder; writes the active-run marker);
+     It refuses while another AC run is active ("An AC run is still active"): stop and report its
+     message. Never end that run yourself; the user does, once no AC subagent is running;
   2. `task_message.py <feature-arg>` — prints the task message;
   3. `changed_files.py snapshot`;
   4. the `Agent` tool with `subagent_type: ac-feature-translator`, `run_in_background: false`, and

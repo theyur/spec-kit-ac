@@ -214,6 +214,9 @@ def test_shared_rules(name):
         assert code in content
     assert "`ac_lock.py confirm-spec sources <feature-arg>`" in content
     assert "Never start it, or any other command, yourself." in content or "Never start another command" in content
+    # Step 8, option B: a run script refuses another active run; only the user ends it
+    assert ('It refuses while another AC run is active ("An AC run is still active"): stop and report its message. '
+            "Never end that run yourself; the user does, once no AC subagent is running;") in content
 
 
 def test_translate_rules():

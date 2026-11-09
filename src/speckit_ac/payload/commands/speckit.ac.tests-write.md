@@ -37,6 +37,8 @@ Follow the steps exactly. Stop at the first failure and report it.
 - Starting the test writer, always in this order:
   1. `new_run.py write <feature-arg>` (prints the run folder; writes the active-run marker and copies
      the judge's last feedback, if any);
+     It refuses while another AC run is active ("An AC run is still active"): stop and report its
+     message. Never end that run yourself; the user does, once no AC subagent is running;
   2. `task_message.py <feature-arg>` — prints the task message;
   3. `changed_files.py snapshot`;
   4. the `Agent` tool with `subagent_type: ac-test-writer`, `run_in_background: false`, and

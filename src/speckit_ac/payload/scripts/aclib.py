@@ -317,6 +317,24 @@ def write_text(path: Path, text: str):
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
+def require_no_active_run(root_dir: Path):
+    """Refuse to start a run while another one's marker exists (user decision, step 8, option B). Subagents may run in
+    the background, so overwriting the marker could re-pin a still-working subagent to a run that isn't its own."""
+    path = root_dir / MARKER
+    if not path.exists():
+        return
+    try:
+        marker = json.loads(path.read_text(encoding="utf-8"))
+        what = (f"{marker['role']} {marker['run']}" + (f"/{marker['analyze']}" if marker.get("analyze") else "")
+                + f" of {marker['feature']}" + (" (smoke test)" if marker.get("smoke") else ""))
+    except (OSError, ValueError, KeyError, TypeError):
+        what = "unreadable marker"
+    end = ("smoke_test.py end <role>" if "(smoke test)" in what else "changed_files.py clear")
+    raise AcError(f"An AC run is still active ({what}; {MARKER}). Wait for its subagent's hand-back. If no AC subagent "
+                  f"is running any more (for example, the command was interrupted), the user may end it with "
+                  f"`{end}`; then start again.")
+
+
 def write_marker(root_dir: Path, role: str, feature: Feature, run: str, analyze: str | None = None, **extra):
     marker = {"role": role, "feature": feature.dir, "tag": feature.tag, "run": run, "analyze": analyze, **extra}
     write_text(root_dir / MARKER, json.dumps(marker, indent=2) + "\n")

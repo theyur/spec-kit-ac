@@ -76,8 +76,8 @@ def read_marker_raw(root: Path):
 def start(root: Path, cfg: dict, role: str):
     if (root / aclib.MARKER).exists():
         raise aclib.AcError(f"{aclib.MARKER} exists: an AC run did not finish (it stays, for example, when a "
-                            "command was interrupted before its check). Ask the user to delete that file by hand, then "
-                            "start the smoke test again.")
+                            "command was interrupted before its check). Once no AC subagent is running, the user ends "
+                            "it with `changed_files.py clear`; then start the smoke test again.")
     specs = root / "specs"
     taken = sorted(specs.glob(f"{NUMBER}-*")) if specs.is_dir() else []
     if taken:

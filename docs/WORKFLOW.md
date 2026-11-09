@@ -202,11 +202,16 @@ a matching marker is denied every call.
    to it and denies the role when the marker is missing, for another role or malformed. The run ends at
    `changed_files.py check`, which deletes the marker: afterwards nothing can start or act as an AC
    role until the next run script. `/speckit-ac-tests-analyze` ends a run that stops before its judge
-   (build failure, no TRX, every test passed) with `changed_files.py clear`. A marker can still
-   outlive a command that is interrupted before its check:
+   (build failure, no TRX, no results, every test passed) with `changed_files.py clear`. A marker can
+   still outlive a command that is interrupted before its check:
    - after `new_analyze.py`: no task message yet, so no launch is possible;
-   - between `task_message.py` and the check: the same launch stays possible until the next run script
-     overwrites the marker.
+   - between `task_message.py` and the check: the same launch stays possible.
+
+   **A run script never replaces another run's marker** (step 8 decision). `new_run.py` and
+   `new_analyze.py` refuse while one exists: subagents may run in the background, and re-pinning a
+   still-working subagent to another run would break it without notice. The command stops and reports.
+   Once no AC subagent is running any more, the user ends the old run with `changed_files.py clear`
+   (`smoke_test.py end <role>` for a smoke-test marker) and starts again.
 10. **The main agent never starts `/speckit-ac-*` itself.** The deploy step marks those skills
     human-only and the guard blocks a main-agent `Skill` call for them; users type the command.
 

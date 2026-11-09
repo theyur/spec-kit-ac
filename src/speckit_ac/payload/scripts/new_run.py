@@ -4,7 +4,7 @@ Usage: new_run.py translate [--feature …]   -> specs/NNN-x/ac/runs/translate-N
        new_run.py write     [--feature …]   -> specs/NNN-x/ac/runs/run-NNN/        (role ac-test-writer)
 For a write run: if the newest analyze-* folder of the previous run has writer-feedback.md, it is copied to
 input-feedback.md. The active-run marker (.workflow/active-run.json) tells the guard which feature and run the
-next subagent works on.
+next subagent works on. Refused while another run's marker exists (see aclib.require_no_active_run).
 """
 import argparse
 import shutil
@@ -22,6 +22,7 @@ def main():
     args = parser.parse_args()
     root = aclib.root(__file__)
     feature = aclib.resolve_feature(root, args.feature, aclib.load_config(root))
+    aclib.require_no_active_run(root)  # before any folder is created
     prefix, role = ("translate-", aclib.TRANSLATOR) if args.kind == "translate" else ("run-", aclib.WRITER)
 
     runs_dir = feature.path(root, "runsDir")

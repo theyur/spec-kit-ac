@@ -664,7 +664,7 @@ def test_smoke_start_refusals(tmp_path):
     project = make_project(tmp_path / "p")
     write(project / ".workflow/active-run.json", "{}")
     result = run_script(project, "smoke_test.py", "start", T)
-    assert result.returncode == 1 and "delete that file by hand" in result.stderr
+    assert result.returncode == 1 and "the user ends it with `changed_files.py clear`" in result.stderr
     (project / ".workflow/active-run.json").unlink()
     write(project / "specs/999-other/spec.md")
     result = run_script(project, "smoke_test.py", "start", T)

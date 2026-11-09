@@ -1,6 +1,7 @@
 """Create the next analyze-K/ folder in the feature's latest run-NNN, mark it as the judge's active run, print it.
 
 Usage: new_analyze.py [--feature …]
+Refused while another run's marker exists (see aclib.require_no_active_run).
 """
 import argparse
 import sys
@@ -16,6 +17,7 @@ def main():
     args = parser.parse_args()
     root = aclib.root(__file__)
     feature = aclib.resolve_feature(root, args.feature, aclib.load_config(root))
+    aclib.require_no_active_run(root)  # before any folder is created
     runs = aclib.numbered(feature.path(root, "runsDir"), "run-")
     if not runs:
         raise aclib.AcError(f"no run folder in {feature.paths()['runsDir']}. Run /speckit-ac-tests-write first.")
