@@ -8,7 +8,8 @@ managed blocks in .gitignore and .gitattributes. Never adds the AC project to th
 (framework, runner) recipe of init_config.py, the Reqnroll adapter, Microsoft.Extensions.TimeProvider.Testing, and
 every package of the surface projects that is not implicit or PrivateAssets=all (their public types must compile in
 ref mode). Versions: central pins; else the surface's version, then the unit tests' (highest when several); else
-the latest stable. On failure the AC folder is removed again and the other files changed so far are listed.
+the latest stable. On failure the AC folder is removed again (or emptied again, if it existed empty before) and the
+other files changed so far are listed.
 """
 import argparse
 import hashlib
@@ -172,11 +173,14 @@ def main():
         aclib.write_block(root / ".gitignore", gitignore_lines(cfg))
         aclib.write_block(root / ".gitattributes", gitattributes_lines(cfg))
     except (aclib.AcError, OSError):
-        if created_folder:
-            shutil.rmtree(ac, ignore_errors=True)
+        # The folder was absent or empty before (checked above), so everything in it is this run's.
+        shutil.rmtree(ac, ignore_errors=True)
+        if not created_folder:
+            ac.mkdir(parents=True, exist_ok=True)
         for line in changes(before, fingerprint(root)):
             print(line)
-        print(f"The AC project folder {cfg['acProjectDir']} was removed again; review the files listed above.")
+        state = "removed again" if created_folder else "emptied again, as it was before"
+        print(f"The AC project folder {cfg['acProjectDir']} was {state}; review the files listed above.")
         raise
 
     for rel in files:

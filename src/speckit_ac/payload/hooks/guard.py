@@ -137,6 +137,10 @@ def load_config(root):
             if overlaps(value, folder):
                 raise ValueError(f"{CONFIG}: specInputs entry {value} overlaps {folder}; spec inputs must be extra "
                                  "project documents outside specs/, .specify/, .workflow/, the AC project and refsDir")
+        folder = implementation_overlap(root, value)
+        if folder is not None:
+            raise ValueError(f"{CONFIG}: specInputs entry {value} overlaps the implementation folder {folder}; spec "
+                             "inputs must describe the domain, never the code")
     return cfg
 
 
@@ -144,6 +148,28 @@ def overlaps(a, b):
     """True if one project-relative path equals or contains the other (case-insensitive)."""
     a, b = a.lower(), b.lower()
     return a == b or a.startswith(b + "/") or b.startswith(a + "/")
+
+
+BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)
+
+
+def implementation_overlap(root, value):
+    """The implementation folder (`src`, or a folder holding a .csproj) that spec input `value` equals, contains or
+    lies inside, or None (same rule as aclib.implementation_overlap). The config is changed by hand after init."""
+    if overlaps(value, "src"):
+        return "src"
+    parts = value.split("/")
+    for depth in range(len(parts) + 1):
+        folder = Path(root, *parts[:depth])
+        if folder.is_dir() and any(folder.glob("*.csproj")):
+            return "/".join(parts[:depth]) or "."
+    target = Path(root, *parts)
+    if target.is_dir():
+        for csproj in target.rglob("*.csproj"):
+            rel = csproj.parent.relative_to(Path(root)).as_posix()
+            if not any(BUILD_FOLDER.match(p) for p in rel.split("/")):
+                return rel
+    return None
 
 
 class Guard:

@@ -385,6 +385,34 @@ def test_scaffold_refuses_a_non_empty_folder(tmp_path):
     assert result.returncode == 1 and "is never overwritten" in result.stderr
 
 
+@pytest.mark.parametrize("before", ["absent", "empty"])
+def test_scaffold_failure_leaves_the_ac_folder_as_it_was(tmp_path, monkeypatch, capsys, before):
+    """Copilot on HT PR 16: a package install failure after the first file must not leave a partial project behind,
+    also when the AC folder already existed empty (accepted by the check above)."""
+    project = make_project(tmp_path / "p")
+    shutil.rmtree(project / AC)
+    if before == "empty":
+        (project / AC).mkdir(parents=True)
+    module = load("init_scaffold", project / EXTENSION / "scripts")
+    detect = module.init_detect
+    facts = {"packages": [], "frameworkReferences": [], "cpm": False}
+    monkeypatch.setattr(detect, "runner_of", lambda root: "vstest")
+    monkeypatch.setattr(detect, "evaluate", lambda root, p: {})
+    monkeypatch.setattr(detect, "describe", lambda root, p, evaluated: facts)
+
+    def failing_run(args, cwd):
+        raise module.aclib.AcError(f"{' '.join(args)} failed")
+    monkeypatch.setattr(detect, "run", failing_run)
+    monkeypatch.setattr(sys, "argv", ["init_scaffold.py", "--target-framework", "net10.0"])
+    with pytest.raises(module.aclib.AcError, match="dotnet add"):
+        module.main()
+    if before == "absent":
+        assert not (project / AC).exists()
+    else:
+        assert (project / AC).is_dir() and not any((project / AC).iterdir())
+    assert f"{AC} was" in capsys.readouterr().out
+
+
 # ---- managed blocks ------------------------------------------------------------------------------------------------
 
 def test_block_in_a_new_file(aclib, tmp_path):

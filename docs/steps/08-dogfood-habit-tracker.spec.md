@@ -1,6 +1,6 @@
 # Step 8 — Dogfood in Habit Tracker
 
-**Status:** done (2026-11-09; decisions 1–9 approved as drafted; deviations D1–D3 in the plan; results in [08-dogfood-habit-tracker.results.md](08-dogfood-habit-tracker.results.md); A08 pending the Habit Tracker PR) · **Tracker row:** 8 · **Source of truth:** `docs/DESIGN.md`
+**Status:** done (2026-11-09; decisions 1–9 approved as drafted; deviations D1–D3 in the plan; results in [08-dogfood-habit-tracker.results.md](08-dogfood-habit-tracker.results.md); A08 met on Habit Tracker PR 16) · **Tracker row:** 8 · **Source of truth:** `docs/DESIGN.md`
 
 ## Goal
 

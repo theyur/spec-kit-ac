@@ -458,6 +458,32 @@ def test_invalid_config_blocks_everything(tmp_path, config):
     assert code == DENY and "AC guard error" in reason
 
 
+@pytest.mark.parametrize("spec_input, project_file, folder", [
+    ("src", None, "src"),
+    ("src/README.md", None, "src"),
+    ("lib/Core", "lib/Core/Core.csproj", "lib/Core"),
+    ("lib/Core/notes.md", "lib/Core/Core.csproj", "lib/Core"),
+    ("lib", "lib/Core/Core.csproj", "lib/Core"),
+    ("docs/domain", "App.csproj", "."),
+], ids=["src", "inside src", "a project folder", "inside a project folder", "contains a project folder",
+        "project at the root"])
+def test_spec_input_overlapping_the_code_blocks_everything(tmp_path, spec_input, project_file, folder):
+    """Copilot on HT PR 16: the config is edited by hand after init, so the guard re-checks implementation folders."""
+    project = config_project(tmp_path, {**CONFIG, "specInputs": [spec_input]})
+    if project_file:
+        write(project / project_file, "<Project />\n")
+    write(project / "lib/Core/notes.md")
+    code, reason = call(project, MAIN, "Read", {"file_path": str(project / "README.md")})
+    assert code == DENY and f"overlaps the implementation folder {folder}" in reason
+
+
+def test_spec_input_beside_the_code_is_fine(tmp_path):
+    project = config_project(tmp_path, {**CONFIG, "specInputs": ["docs/domain"]})
+    write(project / "lib/Core/Core.csproj", "<Project />\n")
+    write(project / "docs/domain/bin/Debug/Copied.csproj", "<Project />\n")  # build output is not a project folder
+    assert call(project, MAIN, "Read", {"file_path": str(project / "README.md")})[0] == ALLOW
+
+
 def test_config_paths_are_normalised(tmp_path):
     config = {**CONFIG, "acProjectDir": "./tests\\App.AcceptanceTests/", "refsDir": "artifacts/./refs"}
     project = config_project(tmp_path, json.dumps(config))

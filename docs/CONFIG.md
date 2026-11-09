@@ -65,7 +65,9 @@ Rules checked by the guard and the scripts:
   (normalised: `./tests\App.AcceptanceTests/` is stored as `tests/App.AcceptanceTests`; empty, `.`,
   absolute, drive-letter and `..` paths are invalid);
 - a `specInputs` entry must not equal, contain or lie inside `specs/`, `.specify/`, `.workflow/`,
-  `acProjectDir` or `refsDir` (it would hand the AC subagents `plan.md`, step definitions or locks);
+  `acProjectDir` or `refsDir` (it would hand the AC subagents `plan.md`, step definitions or locks),
+  nor an implementation folder: `src/` or any folder that holds a `.csproj` (outside `bin/` / `obj/`).
+  This is checked on every load, not only by init, because the config is changed by hand;
 - a broken config blocks **every** tool call (guard exit 2) and fails every script (exit 1);
 - a **missing** config means the workflow is not initialised: the guard lets the main agent work
   (except starting `/speckit-ac-*` skills itself) and blocks the AC subagents.

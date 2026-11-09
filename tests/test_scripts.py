@@ -112,6 +112,15 @@ def test_spec_inputs_overlapping_protected_folders_fail(project):
     failed(run_script(project, "ac_feature.py"), 1, "overlaps tests/App.AcceptanceTests")
 
 
+@pytest.mark.parametrize("spec_input, folder", [("src/App.Core", "src"), ("lib/Core/notes.md", "lib/Core"),
+                                                ("lib", "lib/Core")])
+def test_spec_inputs_overlapping_the_code_fail(project, spec_input, folder):
+    """Copilot on HT PR 16: a hand-edited config must not hand the AC subagents an implementation folder."""
+    write(project / "lib/Core/Core.csproj", "<Project />\n")
+    write(project / ".workflow/config.json", json.dumps({**CONFIG, "specInputs": [spec_input]}))
+    failed(run_script(project, "ac_feature.py"), 1, f"overlaps the implementation folder {folder}")
+
+
 @pytest.mark.parametrize("script, args", [
     ("ac_lock.py", ["lock", "sources"]), ("ac_lock.py", ["verify", "sources"]),
     ("ac_lock.py", ["confirm-spec", "sources"]), ("ac_lock.py", ["unlock", "sources"]),

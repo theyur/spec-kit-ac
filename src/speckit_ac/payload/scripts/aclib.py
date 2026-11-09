@@ -25,6 +25,7 @@ TRANSLATOR, WRITER, JUDGE = "ac-feature-translator", "ac-test-writer", "ac-test-
 ROLES = (TRANSLATOR, WRITER, JUDGE)
 FEATURE_NAME = re.compile(r"^(\d{3,})-.+$")
 TIMESTAMP_NAME = re.compile(r"^\d{8}-\d{6}-")
+_BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)  # bin, obj, obj-ref, … (as init_config)
 V1_LIMIT = ("spec-kit-ac v1.0 supports only sequentially numbered feature folders directly under specs/ "
             "(specs/NNN-name).")
 
@@ -78,11 +79,31 @@ def load_config(root_dir: Path) -> dict:
         cfg = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as error:
         raise AcError(f"{CONFIG} is not valid JSON: {error}") from None
-    return validate_config(cfg)
+    return validate_config(cfg, root_dir)
 
 
-def validate_config(cfg) -> dict:
-    """Check a config (schema 1, docs/CONFIG.md) and return it with its paths normalised; AcError if invalid."""
+def implementation_overlap(root_dir: Path, value: str):
+    """The implementation folder (`src`, or a folder holding a .csproj) that spec input `value` equals, contains or
+    lies inside, or None. Checked on every load, because the config is changed by hand after init."""
+    if _overlaps(value, "src"):
+        return "src"
+    parts = value.split("/")
+    for depth in range(len(parts) + 1):
+        folder = root_dir.joinpath(*parts[:depth])
+        if folder.is_dir() and any(folder.glob("*.csproj")):
+            return "/".join(parts[:depth]) or "."
+    target = root_dir.joinpath(*parts)
+    if target.is_dir():
+        for csproj in target.rglob("*.csproj"):
+            rel = csproj.parent.relative_to(root_dir).as_posix()
+            if not any(_BUILD_FOLDER.match(p) for p in rel.split("/")):
+                return rel
+    return None
+
+
+def validate_config(cfg, root_dir: Path | None = None) -> dict:
+    """Check a config (schema 1, docs/CONFIG.md) and return it with its paths normalised; AcError if invalid.
+    With `root_dir`, spec inputs are also checked against the project's implementation folders."""
     if not isinstance(cfg, dict) or cfg.get("schemaVersion") != SCHEMA_VERSION:
         raise AcError(f"{CONFIG}: schemaVersion must be {SCHEMA_VERSION}")
     for key in STRING_KEYS:
@@ -103,6 +124,10 @@ def validate_config(cfg) -> dict:
             if _overlaps(value, folder):
                 raise AcError(f"{CONFIG}: specInputs entry {value} overlaps {folder}; spec inputs must be extra "
                               "project documents outside specs/, .specify/, .workflow/, the AC project and refsDir")
+        folder = implementation_overlap(root_dir, value) if root_dir is not None else None
+        if folder is not None:
+            raise AcError(f"{CONFIG}: specInputs entry {value} overlaps the implementation folder {folder}; spec "
+                          "inputs must describe the domain, never the code")
     return cfg
 
 

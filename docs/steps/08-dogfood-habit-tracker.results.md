@@ -34,7 +34,15 @@ subagent transcripts (`~/.claude/projects/E--Personal-agentic-engineering-course
 | Post checks | HT build, tests, self-tests; `doctor`; `git status` | build and tests pass (the AC project isn't in the solution); `selftest.ps1` PASSED (175 cases); `oracle.ps1` PASSED (with `-Bash`); `doctor` 13 ok, 0 FAIL; `settings.json` byte-identical to the post-install snapshot. `git status`: 66 paths, being install's set, init's set (`.workflow/config.json`, `.gitignore`, `.gitattributes`, `dotnet-tools.json`, 7 files under `tests/HT.AcceptanceTests/`), the ADR, `sonar.yml` and the untouched `GITHUB-SETUP.md`. `guard.log`, `active-run.json` and `artifacts/refs/` are git-ignored |
 
 Acceptance checks: S08-A01 (text and test, 676 passed on 3.14 and 3.11), A02, A03, A04, A05 (after the config
-fix), A06 and A07 are met. **A08 is pending** until the user opens the PR (Sonar and CodeQL results).
+fix), A06 and A07 are met.
+
+**A08 is met** on Habit Tracker PR 16 (head `2752ce9`, 2026-11-09):
+- `/process-pr-feedback` reported SonarQube Cloud green and CodeQL green.
+- Checked independently: Sonar has 0 open issues on the PR, and CodeQL's C#, JavaScript/TypeScript and Actions
+  analyses report 0 results.
+- Caveat: the AC project has no `.cs` files yet (only the `.csproj`, `reqnroll.json`, `Directory.Build.props` and
+  `.gitkeep` files). So this doesn't yet show how CodeQL treats step definitions, or that the Sonar exclusion has an
+  effect. The first feature's PR will show both.
 
 ## Open items carried into step 8
 
@@ -78,16 +86,45 @@ outside the smoke cases. Main-agent decisions are never logged; the two main-age
    - The plan's reset list (6a.4) had `.config/`; it is corrected in the plan notes. The reset was never needed.
 4. **The proposed AC project folder follows the solution name** (`tests/HabitTracker.AcceptanceTests`). The user
    changed it to `tests/HT.AcceptanceTests` in the summary; this works as designed.
-5. **CodeQL default setup scans every `.cs` file** and can't exclude paths (spec risk 3). Whether it reports anything
-   in `tests/HT.AcceptanceTests/` shows on the first PR (A08).
+5. **CodeQL default setup scans every `.cs` file** and can't exclude paths (spec risk 3). PR 16 had no results, but
+   it held no step definitions either; the first feature's PR will show the effect.
 
 ## Fixes made during the run
 
-None in the package. Every defect check passed, so the fix loop (plan 6a) was not needed.
+None during the live run: every defect check passed, so the fix loop (plan 6a) was not needed. The fixes below came
+from the PR review.
+
+## Copilot review on PR 16 (head `2752ce9`)
+
+Three findings, all in spec-kit-ac code that install copied into HT. Fixed here and deployed to HT with
+`speckit-ac upgrade`: `doctor` 0 FAIL, `settings.json` unchanged.
+
+1. **High, valid: spec inputs were not checked against implementation folders after init.**
+   - Init refuses `src/` and project folders when it asks, but the config is changed by hand afterwards. The guard
+     (`load_config`) and `aclib.validate_config` checked only `specs/`, `.specify/`, `.workflow/`, the AC project and
+     the refs folder.
+   - **Fix:** both now reject a spec input that equals, contains or lies inside `src/` or a folder holding a
+     `.csproj` (outside `bin/` / `obj/`). Checked on every load. New tests: 7 in `test_guard.py`, 3 in
+     `test_scripts.py`. CONFIG.md updated.
+2. **High, false positive: the tool manifest at the repository root.**
+   - Copilot said discovery only finds `.config/dotnet-tools.json`. That is wrong: the SDK also finds a
+     `dotnet-tools.json` in the folder itself.
+   - **Evidence:**
+     - a fresh clone of the PR branch (no `.config/`) runs `dotnet tool restore` and `dotnet tool run ilspycmd`;
+     - `dotnet tool list` in HT names `E:\…\dotnet-tools.json` as the manifest;
+     - init's check [4] (`dotnet tool restore`, `export_refs.py`) passed with it.
+   - No change.
+3. **Medium, valid: no rollback when the AC folder existed empty.** `init_scaffold.py` accepts an existing empty AC
+   folder but removed it on failure only when it had created it, so a failed package install left a partial project
+   behind, which the next init then refused.
+   - **Fix:** on failure the folder is emptied again (or removed, when this run created it).
+   - New test: `test_scaffold_failure_leaves_the_ac_folder_as_it_was`, for both cases.
+
+Suite after the fixes: 688 passed, 9 skipped (CPython 3.14 and 3.11).
 
 ## Not covered
 
 - A Habit Tracker feature through the flow (out of scope; the first feature is course work). In particular, the
   ADR's database rules (composition and reset entry points, `HT-AC`) are untested until a feature persists data.
 - A cold-uv-start hook timing.
-- A08: the PR's Sonar and CodeQL results.
+- Sonar and CodeQL on real step definitions (none exist yet; see A08).
