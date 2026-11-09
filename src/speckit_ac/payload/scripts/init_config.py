@@ -125,7 +125,9 @@ def build(args, root: Path) -> dict:
         "acTestCommand": ac_test,
         "testFramework": args.framework,
     }
-    return aclib.validate_config(cfg)
+    # With the root, as on every load: refsDir (deleted before each export) is also checked against src/ and every
+    # project folder, so init never writes a config the scripts and the guard would then refuse.
+    return aclib.validate_config(cfg, root)
 
 
 def main():

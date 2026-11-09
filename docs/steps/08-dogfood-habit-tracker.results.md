@@ -225,6 +225,24 @@ now closed in spec-kit-ac and deployed to HT.
      `cd <ac> && cat StepDefinitions/…`. Prose such as "support" is not matched.
    - Variables and globs still get through; WORKFLOW §6 is updated. New tests: 4 denied, 2 allowed.
 
+## Copilot fifth review on PR 16 (head `630d438`)
+
+Two findings, both on `init_config.py`, both rated High. A probe ran the writer and the loader on a scratch
+project.
+
+1. **"Validate all configured project and solution paths": false positive.**
+   - `solution`, `acSurfaceProjects` and `unitTestProjects` get the project-relative check in the writer, in
+     `aclib.validate_config` and in the guard.
+   - `../../other/secret.csproj` is rejected in all three.
+   - New tests pin this for the writer.
+2. **"Prevent refsDir from targeting source or the AC project": partly valid.**
+   - Copilot says export could delete source. It can't: `export_refs.py` loads the config through
+     `validate_config(cfg, root)` before `rmtree`, and that call refuses `src`, project folders and the AC folder.
+   - The real gap is in init's writer. It called `validate_config(cfg)` without the root, so `--refs-dir src` (or
+     a unit-test project folder) was written to a config that every later script and the guard refused.
+   - **Fix:** the writer validates with the root.
+   - New tests: 1 accepted, 9 refused.
+
 ## Not covered
 
 - A Habit Tracker feature through the flow (out of scope; the first feature is course work). In particular, the

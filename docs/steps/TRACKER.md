@@ -196,6 +196,10 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
     - an AC folder that is an existing project (overlaps `src/`, holds another `.csproj`, or `acProject` is a
       surface or unit-test project) is rejected;
     - the guard's shell rule normalises `./` and `\`, and catches `cd <ac> && cat StepDefinitions/…`.
+  - **Copilot fifth review on PR 16:** two findings.
+    - Paths outside the checkout: a false positive, already refused everywhere. Tests added.
+    - `refsDir` on source: the loaders already refused it before `rmtree`. Init's writer did not, and it now
+      validates against the project on disk too.
   - **Review scope:** Copilot keeps finding issues in code unchanged since the first review. After this round,
     further package review belongs in spec-kit-ac's own repository (step 9), not the Habit Tracker PR.
   - **Candidate follow-up:** init's spec-input question steered toward `SPEC.md` and away from ADR 0003 (it says

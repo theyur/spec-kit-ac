@@ -280,6 +280,32 @@ def test_config_spec_inputs(config, tmp_path, spec_input, ok):
             config.build(args, tmp_path)
 
 
+@pytest.mark.parametrize("refs_dir,ok", [
+    ("artifacts/refs", True), ("src", False), ("src/App.Core/refs", False), ("tests/App.Tests", False),
+    ("tests/App.Tests/refs", False), ("tests/App.AcceptanceTests", False), ("tests", False), ("specs", False),
+    (".workflow/refs", False), ("../refs", False),
+])
+def test_config_refs_dir(config, aclib, tmp_path, refs_dir, ok):
+    # refsDir is deleted before every export: init refuses the same folders the loaders and the guard refuse.
+    write(tmp_path / "src/App.Core/App.Core.csproj", "<Project />\n")
+    write(tmp_path / "tests/App.Tests/App.Tests.csproj", "<Project />\n")
+    args = config_args(refs_dir=refs_dir)
+    if ok:
+        cfg = config.build(args, tmp_path)
+        assert cfg["refsDir"] == refs_dir and aclib.validate_config(dict(cfg), tmp_path) == cfg
+    else:
+        with pytest.raises(Exception, match="refsDir"):
+            config.build(args, tmp_path)
+
+
+@pytest.mark.parametrize("override,key", [({"solution": "../../other/App.slnx"}, "solution"),
+                                          ({"surface": ["../other/Secret.csproj"]}, "acSurfaceProjects"),
+                                          ({"unit_tests": ["C:/other/Other.Tests.csproj"]}, "unitTestProjects")])
+def test_config_rejects_paths_outside_the_project(config, tmp_path, override, key):
+    with pytest.raises(Exception, match=f"key {key} must be a project-relative path"):
+        config.build(config_args(**override), tmp_path)
+
+
 @pytest.mark.parametrize("override", [{"ac_project_dir": "tests/My App.AcceptanceTests"},
                                       {"refs_dir": "artifacts/my refs"},
                                       {"unit_tests": ["tests/My Tests/My Tests.csproj"]}])
