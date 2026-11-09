@@ -96,7 +96,9 @@ session starts, and workspace trust is per folder. Run it again in every new che
    1. `smoke_test.py start <role>` — prints the smoke prompt;
    2. the `Agent` tool with `subagent_type: <role>`, `run_in_background: false`, and `prompt` = the
       exact output of `smoke_test.py start`. Add nothing, remove nothing, change nothing. The guard
-      denies any other prompt;
+      denies any other prompt. Wait for the subagent's hand-back (its result) before anything else. If
+      the tool says it runs in the background, make no other tool call until its result arrives; only
+      then run `smoke_test.py end`;
    3. `smoke_test.py end <role>` — compares the guard's log with the expected decisions and removes the
       temporary files. Show its output.
 3. Manual checks, one at a time; report each result:

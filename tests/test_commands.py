@@ -186,6 +186,24 @@ def flat(content):
     return " ".join(content.split())
 
 
+WAIT = "Wait for the subagent's hand-back (its result) before anything else."
+BACKGROUND = "If the tool says it runs in the background, make no other tool call until its result arrives"
+NEXT_STEP = {"translate": "`changed_files.py check`", "tests-write": "`changed_files.py check`",
+             "tests-analyze": "`changed_files.py check`", "init": "`smoke_test.py end`",
+             "critic": "read the report (step 2)"}
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_waits_for_the_hand_back(name):
+    """Step 7: the model ran every subagent in the background; the command must wait before the next step."""
+    content = flat(text(name))
+    launch = content.index("`run_in_background: false`")
+    wait = content.index(WAIT, launch)
+    background = content.index(BACKGROUND, wait)
+    assert content[background + len(BACKGROUND):].startswith(f"; only then {'' if name == 'critic' else 'run '}"
+                                                              f"{NEXT_STEP[name]}")
+
+
 @pytest.mark.parametrize("name", ["translate", "tests-write", "tests-analyze"])
 def test_shared_rules(name):
     content = flat(text(name))

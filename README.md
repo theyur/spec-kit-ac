@@ -8,8 +8,8 @@ implementation), and judge every failing test. Isolation is enforced by a fail-c
 deterministic scripts, not only by instructions.
 
 > **Status: pre-release, under construction.** The CLI and the extension are built and have run end
-> to end once with a live model on a sample project (step 7); not yet dogfooded in a real project or
-> released. Progress is tracked in
+> to end with a live model on a sample project (step 7) and are installed in their first real project, Habit
+> Tracker (step 8: install, init, live smoke test). Not yet released. Progress is tracked in
 > [docs/steps/TRACKER.md](docs/steps/TRACKER.md).
 
 ## Prerequisites (target project)

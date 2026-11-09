@@ -40,7 +40,10 @@ Follow the steps exactly. Stop at the first failure and report it.
   3. `changed_files.py snapshot`;
   4. the `Agent` tool with `subagent_type: ac-test-fail-judge`, `run_in_background: false`, and
      `prompt` = the exact output of `task_message.py`. Add nothing, remove nothing, change nothing:
-     no hints, no explanations, no opinions about the failures. The guard denies any other prompt;
+     no hints, no explanations, no opinions about the failures. The guard denies any other prompt.
+     Wait for the subagent's hand-back (its result) before anything else. If the tool says it runs in
+     the background, make no other tool call until its result arrives; only then run
+     `changed_files.py check`;
   5. `changed_files.py check ac-test-fail-judge`. If it reports a file `OUTSIDE ALLOWLIST`, this is
      an **isolation breach**: report the file names and stop.
 - Never read, search, show or summarise step definitions or `Support/` files. If the build fails,

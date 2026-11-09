@@ -73,6 +73,9 @@ For each pass, up to `run_cap` passes in this run:
    Fill in the prompt template below. Mention every earlier `critic-{stage}-pass-*.md` of the same
    stage so the critic reports the resolution status of each previous note. If the launch fails
    (for example, the model is not available), stop and report the error; never review in its place.
+   Wait for the subagent's hand-back (its result) before anything else. If the tool says it runs in
+   the background, make no other tool call until its result arrives; only then read the report
+   (step 2).
 2. **Read the report** it wrote, `<feature_dir>/critic-{stage}-pass-{n}.md`. Give the user a short
    summary: the verdict, the counts, and each note in one line.
 3. **If the verdict is APPROVE**, stop the loop.

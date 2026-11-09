@@ -263,7 +263,8 @@ a matching marker is denied every call.
   compares with, so it would let the main agent start an AC role with any prompt; the launch rule
   closes only the tool-call routes.
 - The guard checks an AC launch's `prompt` and `run_in_background`, not its `description` (a short
-  label in the UI). Whether that label reaches the subagent is checked in the live smoke test (step 7).
+  label in the UI). In the live runs (steps 7–8) it appeared only in Claude Code's subagent metadata,
+  never in the subagent's messages.
 - The main agent can edit the guard, the scripts and the installed agent files themselves
   (`.specify/extensions/ac/`; `agents/*.md` are the source of every task message),
   `.claude/settings.json` (the guard registration) and `.workflow/config.json` (which shapes every
@@ -296,9 +297,11 @@ a matching marker is denied every call.
 - The smoke test compares (tool, decision) counts, because `guard.log` holds no paths. A wrongly
   allowed read shows up as a missing `deny`, not by its path.
 - Claude Code may run every AC subagent (and the critic) in the background, even though the
-  commands ask for the foreground (seen in the step 7 live run). The commands rely on the main agent
-  waiting for the subagent's hand-back before `changed_files.py check`, which ends the run; a main
-  agent that went on early would delete the marker and the guard would deny the subagent's next call.
+  commands ask for the foreground. This happened in every launch of the step 7 and step 8 live runs.
+  - The commands therefore tell the main agent to wait for the hand-back and make no other tool call
+    before it. In step 8 it ended its turn and went on when the hand-back arrived.
+  - This is a prompt rule. A main agent that went on early would run `changed_files.py check`, which
+    deletes the marker, and the guard would then deny the subagent's next call.
 - On Windows the hook command runs in Git Bash: a hand-edited command with backslashes in a path
   loses them (`C:\x\python.exe` becomes `C:xpython.exe`). The deployed command uses forward slashes.
 - The critic's "no code reading" rule in stage `ac` is a prompt rule only: the critic runs with
