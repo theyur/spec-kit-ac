@@ -226,6 +226,9 @@ def test_translate_rules():
         assert forbidden in content
     assert "Only after an explicit approval: `ac_lock.py lock features <feature-arg>`" in content
     assert "`check_acceptance.py <feature-arg>` passes" in content
+    # Copilot on HT PR 16: an item without a scenario is either an issue the user decides on or a recorded skip
+    assert "is not in the run's Issues table (an item dropped silently)" in content
+    assert "It refuses while an item without a scenario is not recorded as skipped in this run" in content
 
 
 def test_tests_write_rules():
@@ -233,6 +236,7 @@ def test_tests_write_rules():
     assert "`fresh`" in content and "Do not read the files first" in content
     assert "Never run the tests of the whole solution" in content
     assert "cross-feature changes, missing packages" in content
+    assert '`dotnet build "<solution>" -nologo -v q`' in content  # quoted: a solution name may contain spaces
 
 
 def test_tests_analyze_rules():
@@ -370,6 +374,8 @@ JUDGE = ("# Judge report\n\n<!-- WRITER-FEEDBACK:BEGIN -->\n## Feedback for the 
 
 def translate(project):
     """/speckit-ac-translate phase 2 (sources locked in phase 1). Skipped: export_refs.py (needs dotnet)."""
+    # AC-001 gets a scenario and AC-002 is an issue the user skips, so every item is covered when the features lock.
+    write(project / S1 / "acceptance.md", "# acceptance.md\n\n### AC-001 (FR-001) Converts\n\n### AC-002 (FR-001) Rounds\n")
     run(project, "ac_lock.py", "lock", "sources", "--feature", "F001")  # end of phase 1
     run(project, "ac_feature.py", "--feature", "F001")
     run(project, "ac_lock.py", "verify", "sources", "--feature", "F001")

@@ -358,6 +358,13 @@ def test_render(scaffold, config, pair):
     assert "<BaseIntermediateOutputPath>obj-ref\\</BaseIntermediateOutputPath>" in props
     assert "<DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**;bin-ref/**;obj-ref/**</DefaultItemExcludes>" in props
     assert json.loads(files[f"{AC}/reqnroll.json"])["runtime"]["missingOrPendingStepsOutcome"] == "Error"
+    # Copilot on HT PR 16: xUnit runs collections in parallel by default; the scaffold runs them one at a time.
+    runner_item = '<None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />'
+    if framework.startswith("xunit"):
+        assert json.loads(files[f"{AC}/xunit.runner.json"])["parallelizeTestCollections"] is False
+        assert runner_item in project
+    else:
+        assert f"{AC}/xunit.runner.json" not in files and "xunit.runner.json" not in project
     assert sorted(p for p in files if p.endswith(".gitkeep")) == sorted(
         f"{AC}/{f}/.gitkeep" for f in ("Features", "Samples", "StepDefinitions", "Support/Shared"))
 

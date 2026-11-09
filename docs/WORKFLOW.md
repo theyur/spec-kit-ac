@@ -139,7 +139,7 @@ Paths: `<ac>` = the AC project folder (outside the solution file), `F00N` = the 
 | `<ac>/Samples/F00N/**` | read/write until that feature's `sources` locked, then read | read (current feature) | read | read |
 | `<ac>/Features/F00N/*.feature` | read only (guard; no `.feature` anywhere in `<ac>`) | read/write `.feature` files only, current feature only, until `features` locked | read | read |
 | `specs/NNN-x/ac/*.lock` | written only by the lock script (guard) | no | no | no |
-| AC project files directly in `<ac>/` (`*.csproj`, `reqnroll.json`, `Directory.Build.props`) | read/write | no | read | read |
+| AC project files directly in `<ac>/` (`*.csproj`, `reqnroll.json`, `xunit.runner.json`, `Directory.Build.props`) | read/write | no | read | read |
 | `<ac>/StepDefinitions/**`, `<ac>/Support/**` | **no** (guard) | **no** | read/write, never a `.feature` (see §4) | read |
 | `<ac>/bin/`, `<ac>/obj/` (build output) | read/write | **no** | **no** | **no** |
 | Implementation source | read/write | **no** | **no** | **no** |

@@ -78,8 +78,25 @@ def current_spec(root, feature):
     return spec
 
 
+def require_coverage(root, feature):
+    """Locking the features needs a scenario for every acceptance item, or the user's skip of it (skipped.json of the
+    latest translate run, written by record_skips.py): an item the translator dropped is never locked untested."""
+    import check_features  # same folder; imported here so the sources group never needs it
+    _, _, ids = check_features.scan(root, feature)
+    run = aclib.latest_translation(root, feature)
+    skipped = aclib.skipped_ids(run) if run else set()
+    open_items = [i for i in check_features.uncovered(root, feature, ids) if i not in skipped]
+    if open_items:
+        run_id = run.name if run else "<translate-NNN>"
+        raise aclib.AcError(f"the features of {feature.dir} have no scenario for {', '.join(open_items)} of "
+                            f"{feature.paths()['acceptance']}. Lock only after the user chose to skip them "
+                            f"(record_skips.py {run_id} <AC ids>) or fixed acceptance.md and translated again.")
+
+
 def lock(root, feature, group):
     files = group_files(root, feature, group)
+    if group == "features":
+        require_coverage(root, feature)
     write_lock(root, feature, group, files, current_spec(root, feature) if group == "sources" else None)
     print(f"Locked {len(files)} {group} file(s) of {feature.dir} ({feature.tag}) in {feature.paths()[lock_key(group)]}")
 

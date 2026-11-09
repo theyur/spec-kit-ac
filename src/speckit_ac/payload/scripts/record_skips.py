@@ -29,9 +29,7 @@ def main():
     if not report.is_file():
         raise aclib.AcError(f"{aclib.rel_posix(root, run_dir)}/translation-report.md not found")
 
-    text = report.read_text(encoding="utf-8")
-    issues = text.split("## Issues", 1)[1].split("\n## ", 1)[0] if "## Issues" in text else ""
-    issue_ids = set(re.findall(r"^\|\s*(AC-\d+)\s*\|", issues, re.MULTILINE))
+    issue_ids = aclib.report_issue_ids(report)
     unknown = [i for i in args.ids if i not in issue_ids]
     if unknown:
         raise aclib.AcError(f"not in the report's Issues table: {', '.join(unknown)}")

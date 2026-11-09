@@ -59,7 +59,8 @@ Follow the steps exactly. Stop at the first failure and report it.
 3. Run `ac_lock.py verify sources <feature-arg>` and `ac_lock.py verify features <feature-arg>`
    (lock checks above). A missing lock means the feature is not translated yet: stop and point to
    `/speckit-ac-translate`.
-4. Build the product: `dotnet build <solution> -nologo -v q` (`solution` from the config). Then run
+4. Build the product: `dotnet build "<solution>" -nologo -v q` (`solution` from the config, quoted: it
+   may contain spaces). Then run
    `unitTestCommand` once for each entry of `unitTestProjects` (`{project}` replaced). Never run the
    tests of the whole solution. If the build or any unit test run fails: stop and report. The
    implementation step is not finished.

@@ -20,7 +20,7 @@
 {{FRAMEWORK_REFERENCES}}
   <ItemGroup>
     <None Include="Samples/**" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+{{RUNNER_CONFIG}}  </ItemGroup>
 
   <!-- Ref mode: used only by ac-feature-translator and ac-test-writer to compile. Never executed.
        Every reference assembly export_refs.py writes to the refs folder is referenced. -->

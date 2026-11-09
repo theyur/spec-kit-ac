@@ -42,4 +42,4 @@ from their own location (`.specify/extensions/ac/scripts/` → four levels up).
 | `scripts/smoke_test.py` | Live guard smoke test: smoke marker, `guard.log` comparison, isolation file | 5 (done; run live in step 7) |
 | `scripts/extract_feedback.py` | Writer-feedback section of a judge report | 2 (done) |
 | `templates/acceptance-template.md` | Format of a feature's `acceptance.md` | 4 (done) |
-| `templates/ac-project/` | AC project csproj and `Directory.Build.props` templates, `reqnroll.json` | 5 (done) |
+| `templates/ac-project/` | AC project csproj and `Directory.Build.props` templates, `reqnroll.json`, `xunit.runner.json` (xUnit only) | 5 (done) |

@@ -1,8 +1,8 @@
 """Create the AC test project for /speckit-ac-init from .workflow/config.json (docs/WORKFLOW.md, setup).
 
 Usage: init_scaffold.py --target-framework net10.0
-Writes <acProjectDir>/ (csproj, Directory.Build.props, reqnroll.json, Features/ Samples/ StepDefinitions/
-Support/Shared/ with .gitkeep) from the extension's templates/ac-project/, adds the packages with
+Writes <acProjectDir>/ (csproj, Directory.Build.props, reqnroll.json, xunit.runner.json for xUnit, Features/
+Samples/ StepDefinitions/ Support/Shared/ with .gitkeep) from the extension's templates/ac-project/, adds the packages with
 `dotnet add package` (central package management adds the pins), installs the local tool ilspycmd, and writes the
 managed blocks in .gitignore and .gitattributes. Never adds the AC project to the solution. Packages: the
 (framework, runner) recipe of init_config.py, the Reqnroll adapter, Microsoft.Extensions.TimeProvider.Testing, and
@@ -27,6 +27,12 @@ import init_detect  # noqa: E402
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates" / "ac-project"
 TIME_PROVIDER = "Microsoft.Extensions.TimeProvider.Testing"
 FOLDERS = ("Features", "Samples", "StepDefinitions", "Support/Shared")
+# xUnit is the only supported framework that runs test collections (Reqnroll: one per feature) in parallel by default.
+# Acceptance scenarios usually share one test environment (a database, files), so they run one collection at a time,
+# as NUnit and MSTest do by default (Copilot on HT PR 16). A project that wants parallel runs edits the file.
+XUNIT = ("xunit2", "xunit3")
+XUNIT_RUNNER_ITEM = ("    <!-- Test collections run one at a time: scenarios usually share one test environment. -->\n"
+                     '    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />\n')
 WATCHED = ("Directory.Packages.props", "dotnet-tools.json", ".config/dotnet-tools.json", ".gitignore",
            ".gitattributes")
 
@@ -97,6 +103,7 @@ def render(cfg: dict, target_framework: str, runner: str, framework_refs: list[s
         "FRAMEWORK_REFERENCES": fw_refs,
         "REFS_DIR": posixpath.relpath(cfg["refsDir"], ac),
         "PROJECT_REFERENCES": project_refs,
+        "RUNNER_CONFIG": XUNIT_RUNNER_ITEM if framework in XUNIT else "",
     }
 
     def fill(name):
@@ -112,6 +119,8 @@ def render(cfg: dict, target_framework: str, runner: str, framework_refs: list[s
         f"{ac}/Directory.Build.props": fill("Directory.Build.props.template"),
         f"{ac}/reqnroll.json": (TEMPLATES / "reqnroll.json").read_text(encoding="utf-8"),
     }
+    if framework in XUNIT:
+        files[f"{ac}/xunit.runner.json"] = (TEMPLATES / "xunit.runner.json").read_text(encoding="utf-8")
     files.update({f"{ac}/{folder}/.gitkeep": "" for folder in FOLDERS})
     return files
 

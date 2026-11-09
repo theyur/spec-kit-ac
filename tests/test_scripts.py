@@ -146,6 +146,7 @@ def test_spec_inputs_overlapping_the_code_fail(project, spec_input, folder):
 ])
 def test_scripts_print_the_resolved_feature(project, script, args):
     """S02-R06: every per-feature script names the feature folder and tag it acted on."""
+    items(project, 1, 2)
     ok(run_script(project, "ac_lock.py", "lock", "sources"))
     write(project / AC / "Features/F001/Login.feature", GOOD)
     write(project / S1 / "ac/runs/translate-001/translation-report.md", REPORT)
@@ -201,6 +202,7 @@ def test_spec_drift_ignored_for_other_features(project):
 
 
 def test_features_lock(project):
+    items(project)  # no acceptance items: coverage is tested in test_features_lock_needs_coverage
     failed(run_script(project, "ac_lock.py", "lock", "features"), 1, "no .feature file")
     write(project / AC / "Features/F001/A.feature", "@F001\nFeature: A\n")
     ok(run_script(project, "ac_lock.py", "lock", "features"))
@@ -401,7 +403,14 @@ Feature: Login
 """
 
 
+def items(project, *numbers, feature=S1):
+    """Replace the feature's acceptance.md with the items AC-00<n> (the fixture has AC-001..005)."""
+    write(project / feature / "acceptance.md",
+          "# acceptance.md\n\n" + "".join(f"### AC-00{n} (FR-001) item {n}\n\n" for n in numbers))
+
+
 def check(project, text, name="Login.feature"):
+    items(project, 1, 2)
     write(project / AC / "Features/F001" / name, text)
     return run_script(project, "check_features.py")
 
@@ -431,10 +440,52 @@ def test_check_features_problems(project, text, problem):
     failed(check(project, text), 1, problem)
 
 
+ISSUES = "# Translation report\n\n## Issues\n\n| AC id | Kind |\n|---|---|\n{rows}\n## Notes\n| AC-004 | note |\n"
+
+
+def translation(project, run, *ids):
+    rows = "".join(f"| {i} | gap |\n" for i in ids)
+    write(project / S1 / f"ac/runs/{run}/translation-report.md", ISSUES.format(rows=rows))
+
+
+def test_check_features_every_item_needs_a_scenario_or_an_issue(project):
+    """Copilot on HT PR 16: an acceptance item the translator dropped silently fails the check."""
+    items(project, 1, 2, 3, 4)
+    write(project / AC / "Features/F001/Login.feature", GOOD)
+    failed(run_script(project, "check_features.py"), 1,
+           "no scenario for AC-003, AC-004 of specs/001-alpha/acceptance.md, and not in the Issues table of a "
+           "translation report")
+    translation(project, "translate-001", "AC-003", "AC-004")
+    assert "no scenario, in the Issues table: AC-003, AC-004" in ok(run_script(project, "check_features.py"))
+    translation(project, "translate-002", "AC-003")  # only the latest run counts; Notes rows are not issues
+    failed(run_script(project, "check_features.py"), 1,
+           "no scenario for AC-004 of specs/001-alpha/acceptance.md, and not in the Issues table of "
+           "specs/001-alpha/ac/runs/translate-002/translation-report.md")
+
+
 def test_check_features_needs_files(project):
+    items(project, 1, 2, feature=S2)
     write(project / AC / "Features/F002/B.feature", GOOD.replace("@F001", "@F002"))
     failed(run_script(project, "check_features.py"), 1, "no .feature file")
     assert "OK" in ok(run_script(project, "check_features.py", "--feature", "002"))
+
+
+def test_features_lock_needs_coverage(project):
+    """An item without a scenario is locked only after the user chose to skip it (record_skips.py)."""
+    items(project, 1, 2, 3)
+    write(project / AC / "Features/F001/Login.feature", GOOD)
+    failed(run_script(project, "ac_lock.py", "lock", "features"), 1,
+           "have no scenario for AC-003 of specs/001-alpha/acceptance.md. Lock only after the user chose to skip "
+           "them (record_skips.py <translate-NNN> <AC ids>)")
+    translation(project, "translate-001", "AC-003")
+    ok(run_script(project, "record_skips.py", "translate-001", "AC-003"))
+    ok(run_script(project, "ac_lock.py", "lock", "features"))
+    translation(project, "translate-002", "AC-003")  # a newer translation needs its own skip decision
+    failed(run_script(project, "ac_lock.py", "lock", "features"), 1, "(record_skips.py translate-002 <AC ids>)")
+    write(project / S1 / "ac/runs/translate-002/skipped.json", '{"AC-003": true}\n')
+    failed(run_script(project, "ac_lock.py", "lock", "features"), 1, "is not a list of AC ids")
+    ok(run_script(project, "record_skips.py", "translate-002", "AC-003"))
+    ok(run_script(project, "ac_lock.py", "lock", "features"))
 
 
 # ---- clear_generated.py ----------------------------------------------------------------------------------------
@@ -692,7 +743,7 @@ def test_installed_layout_has_every_script(project):
     templates = sorted(p.relative_to(project / EXTENSION / "templates").as_posix()
                        for p in (project / EXTENSION / "templates").rglob("*") if p.is_file())
     assert templates == ["ac-project/AcceptanceTests.csproj.template", "ac-project/Directory.Build.props.template",
-                         "ac-project/reqnroll.json", "acceptance-template.md"]
+                         "ac-project/reqnroll.json", "ac-project/xunit.runner.json", "acceptance-template.md"]
     assert CONFIG["acProjectDir"] == AC
 
 

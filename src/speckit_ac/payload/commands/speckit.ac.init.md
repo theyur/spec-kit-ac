@@ -67,7 +67,8 @@ Follow the steps exactly. Stop at the first failure and report it.
 4. `init_config.py --solution <solution> --surface <project> … --unit-tests <project> …
    --ac-project-dir <folder> --refs-dir <folder> --spec-input <path> … --framework <framework>
    --runner <runner>` (one `--surface` / `--unit-tests` / `--spec-input` per value; `<runner>` is the
-   detected `runner`). It writes `.workflow/config.json` and prints it.
+   detected `runner`; quote a path that contains spaces, such as the solution). It writes
+   `.workflow/config.json` and prints it.
 5. `init_scaffold.py --target-framework <the confirmed target framework>`. It creates the AC project,
    adds the packages and the local tool `ilspycmd`, and writes the managed blocks in `.gitignore` and
    `.gitattributes`. If it fails: show its output, and tell the user to delete

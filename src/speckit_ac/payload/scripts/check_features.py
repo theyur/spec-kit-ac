@@ -6,6 +6,8 @@ build passes and the scenario has no steps, and a scenario without steps passes.
 - description text inside a scenario after its first step, or any non-keyword line between Scenario and its first step,
 - a scenario without an @AC- tag, or an @AC- id used by two scenarios of the feature,
 - an @AC- tag that is not @AC-<digits> or not an item (`### AC-NNN …`) of the feature's acceptance.md,
+- an item of acceptance.md with no scenario that is not in the Issues table of the latest translation report (the
+  user decides on those: skip, fix or stop; `ac_lock.py lock features` then requires them in skipped.json),
 - a file whose Feature-level tags do not include the feature tag @FNNN, or that carries another @F<digits> tag,
 - no .feature file at all.
 Usage: check_features.py [--feature …]
@@ -29,6 +31,22 @@ COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 def acceptance_ids(path: Path) -> set:
     """The AC ids defined in acceptance.md (`### AC-NNN …` headings, HTML comments ignored)."""
     return set(AC_ITEM.findall(COMMENT.sub("", path.read_text(encoding="utf-8")))) if path.is_file() else set()
+
+
+def scan(root: Path, feature):
+    """(files, problems, ids) for the feature's .feature files; ids maps each @AC- tag to the scenarios carrying it."""
+    folder = feature.path(root, "featuresDir")
+    files = sorted(folder.rglob("*.feature")) if folder.is_dir() else []
+    problems, ids = [], {}
+    for feature_file in files:
+        check_file(feature_file, aclib.rel_posix(root, feature_file), feature.tag, problems, ids)
+    return files, problems, ids
+
+
+def uncovered(root: Path, feature, ids: dict) -> list[str]:
+    """The acceptance.md items no scenario carries, in numeric order."""
+    covered = {m[1] for m in map(AC_TAG.match, ids) if m}
+    return aclib.ac_sorted(acceptance_ids(feature.path(root, "acceptance")) - covered)
 
 
 def check_file(feature_file, name, tag, problems, ids):
@@ -92,13 +110,9 @@ def main():
     args = parser.parse_args()
     root = aclib.root(__file__)
     feature = aclib.resolve_feature(root, args.feature, aclib.load_config(root))
-    folder = feature.path(root, "featuresDir")
-    files = sorted(folder.rglob("*.feature")) if folder.is_dir() else []
+    files, problems, ids = scan(root, feature)
     if not files:
         raise aclib.AcError(f"no .feature file in {feature.paths()['featuresDir']}")
-    problems, ids = [], {}
-    for feature_file in files:
-        check_file(feature_file, aclib.rel_posix(root, feature_file), feature.tag, problems, ids)
     # Every scenario traces to a reviewed acceptance item (Copilot on HT PR 16): `@AC-<digits>`, defined in acceptance.md.
     known = acceptance_ids(feature.path(root, "acceptance"))
     for ac, places in sorted(ids.items()):
@@ -110,9 +124,20 @@ def main():
         # A Scenario Outline is one scenario; the same id on two scenarios means one AC item was split or duplicated.
         if len(places) > 1:
             problems.append(f"{ac} is used by {len(places)} scenarios: {', '.join(places)}")
+    # Every acceptance item has a scenario, or the translator listed it as an issue for the user to decide on (Copilot
+    # on HT PR 16): an item dropped silently would otherwise pass and be locked untested.
+    missing = uncovered(root, feature, ids)
+    run = aclib.latest_translation(root, feature)
+    report = run / "translation-report.md" if run else None
+    unlisted = [i for i in missing if report is None or i not in aclib.report_issue_ids(report)]
+    if unlisted:
+        where = aclib.rel_posix(root, report) if report else "a translation report (no translate-NNN run)"
+        problems.append(f"no scenario for {', '.join(unlisted)} of {feature.paths()['acceptance']}, and not in the "
+                        f"Issues table of {where}")
     if problems:
         raise aclib.AcError(f"feature check of {feature.dir} ({feature.tag})\n  " + "\n  ".join(problems))
-    print(f"OK: {len(ids)} scenario(s) in {len(files)} feature file(s) of {feature.dir} ({feature.tag})")
+    issues = f"; no scenario, in the Issues table: {', '.join(missing)}" if missing else ""
+    print(f"OK: {len(ids)} scenario(s) in {len(files)} feature file(s) of {feature.dir} ({feature.tag}){issues}")
 
 
 if __name__ == "__main__":

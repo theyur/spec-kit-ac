@@ -96,7 +96,8 @@ Follow the steps exactly. Stop at the first failure and report it.
     assemblies). If it fails: stop and report its message.
 12. Run `clear_generated.py features <feature-arg>`.
 13. Start the translator (Rules, steps 1–5).
-14. Run `check_features.py <feature-arg>` and note the result.
+14. Run `check_features.py <feature-arg>` and note the result. It also fails when an item of
+    `acceptance.md` has no scenario and is not in the run's Issues table (an item dropped silently).
 15. Read `translation-report.md` in the run folder. Report to the user: run id, build status, the
     feature check result, items translated, and the full Issues table (AC id, kind, problem,
     suggested fix for `acceptance.md`, scope).
@@ -112,7 +113,8 @@ Follow the steps exactly. Stop at the first failure and report it.
 17. Show the generated feature file names and the number of scenarios. You may read the feature files
     to answer questions; never edit them. Suggest `/speckit-ac-critic features` for an independent
     comparison with `acceptance.md`, and ask the user to approve the features. Wait.
-18. Only after an explicit approval: `ac_lock.py lock features <feature-arg>`.
+18. Only after an explicit approval: `ac_lock.py lock features <feature-arg>`. It refuses while an
+    item without a scenario is not recorded as skipped in this run: stop and report its message.
 
 ## Report and stop
 

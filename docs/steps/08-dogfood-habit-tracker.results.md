@@ -243,6 +243,34 @@ project.
    - **Fix:** the writer validates with the root.
    - New tests: 1 accepted, 9 refused.
 
+The two threads had "Fixed in …" replies but were never resolved, so Copilot's summary kept listing them as
+open issues on every later review. Resolving them cleared them.
+
+## Copilot sixth review on PR 16 (head `bbaf1c5`)
+
+Five new findings, all in code unchanged since the first review. The user chose to fix 1, 2 and 5.
+
+1. **An acceptance item could be dropped silently: valid, fixed.**
+   - `check_features.py` checked only the tags that were present, and `lock features` didn't check coverage.
+   - Now `check_features.py` fails on an item with no scenario that isn't in the latest translation report's
+     Issues table.
+   - `ac_lock.py lock features` refuses until every such item is in that run's `skipped.json`.
+   - The translator agent already records an issue for every item it doesn't translate.
+2. **No xUnit runner config in the scaffold: partly valid, fixed.**
+   - HT's `xunit.runner.json` was added by hand for ADR 0003.
+   - The scaffold now writes one for xUnit v2/v3, with `parallelizeTestCollections: false`. xUnit is the only
+     supported framework that runs collections in parallel by default.
+   - HT is already scaffolded, so nothing changes there.
+3. **and 4. `None Include` gives NETSDK1022 (template, HT csproj): false positives, declined.**
+   - A scratch net10.0 project with both items builds with no error or warning, and copies both files.
+   - The duplicate `None` items exist, but NETSDK1022 doesn't cover `None`.
+   - `Update` would stop copying in a project with `EnableDefaultNoneItems=false`.
+5. **Solution paths with spaces: mostly a false positive, fixed where real.**
+   - Scripts pass the solution as one argument, and `unitTestCommand` uses the whitespace-checked unit-test
+     projects.
+   - The two command lines the agent types (`dotnet build` in tests-write, `init_config.py` in init) now say to
+     quote the path.
+
 ## Not covered
 
 - A Habit Tracker feature through the flow (out of scope; the first feature is course work). In particular, the

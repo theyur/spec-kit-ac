@@ -314,6 +314,40 @@ def numbered(folder: Path, prefix: str) -> list[Path]:
     return [p for _, p in sorted(found)]
 
 
+def latest_translation(root_dir: Path, feature) -> Path | None:
+    """The feature's newest translate-NNN run folder, or None."""
+    runs = numbered(feature.path(root_dir, "runsDir"), "translate-")
+    return runs[-1] if runs else None
+
+
+def report_issue_ids(report: Path) -> set:
+    """The AC ids in the Issues table of a translation-report.md (an empty set if there is no report or table)."""
+    if not report.is_file():
+        return set()
+    text = report.read_text(encoding="utf-8")
+    issues = text.split("## Issues", 1)[1].split("\n## ", 1)[0] if "## Issues" in text else ""
+    return set(re.findall(r"^\|\s*(AC-\d+)\s*\|", issues, re.MULTILINE))
+
+
+def skipped_ids(run_dir: Path) -> set:
+    """The AC ids the user chose to skip in a translate run (its skipped.json, written by record_skips.py)."""
+    path = run_dir / "skipped.json"
+    if not path.is_file():
+        return set()
+    try:
+        ids = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        ids = None
+    if not isinstance(ids, list) or not all(isinstance(i, str) and re.fullmatch(r"AC-\d+", i) for i in ids):
+        raise AcError(f"{path.as_posix()} is not a list of AC ids")
+    return set(ids)
+
+
+def ac_sorted(ids) -> list[str]:
+    """AC ids in numeric order (AC-999 before AC-1000)."""
+    return sorted(ids, key=lambda i: (int(i.split("-", 1)[1]) if i.split("-", 1)[-1].isdigit() else 0, i))
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
