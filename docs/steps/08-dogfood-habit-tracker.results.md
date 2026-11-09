@@ -122,6 +122,51 @@ Three findings, all in spec-kit-ac code that install copied into HT. Fixed here 
 
 Suite after the fixes: 688 passed, 9 skipped (CPython 3.14 and 3.11).
 
+## Copilot re-review on PR 16 (head `2423ff8`)
+
+Copilot marked the manifest and scaffold findings resolved. It raised 6 new findings and 1 it had missed before. Five
+are fixed here and one in part; one is a false positive.
+
+1. **High, valid: the hand-back screen missed qualified attributes and plain declarations.**
+   - **Fix:** the guard's `CODE` pattern now also matches qualified Reqnroll attributes (`[Reqnroll.Binding]`,
+     `[global::Reqnroll.ThenAttribute(…)]`, hook attributes, `Scope`), C# member and type declarations with an access
+     modifier, and expression bodies (`) =>`).
+   - Prose about code still passes (WORKFLOW §6, updated).
+   - New guard cases: 5 denied, 1 allowed. The agents' final-message rules still pass the screen.
+2. **High, valid: `export_refs.py` skipped every folder starting with `bin` / `obj`.** A folder such as `Bindings/`
+   or `objectives/` escaped the `InternalsVisibleTo` check.
+   - **Fix:** it now matches the build-folder names only (`bin`, `obj`, `obj-ref`, …), as `changed_files.py` does.
+   - New test.
+3. **High, false positive: the xUnit v3 / MTP recipe writes no TRX.** `--report-xunit-trx` writes a Visual Studio
+   TRX file.
+   - **Evidence:** the opt-in end-to-end test for xunit3/MTP (real packages) passes again: `acTestCommand` writes
+     `ac-results.trx`, and `summarize_trx.py` reads its passed and pending results (verification line [7]).
+   - Step 5 verified all seven pairs the same way. No change.
+4. **High, valid: `refsDir` could point at source or the AC project**, and `export_refs.py` deletes it before every
+   export.
+   - **Fix:** the config validators (aclib and guard) reject a `refsDir` that overlaps `specs/`, `.specify/`,
+     `.workflow/`, `.git/`, the AC project or an implementation folder. A `.csproj` at the repository root itself is
+     allowed, for single-project repositories.
+   - New tests.
+5. **Medium, valid: the solution and project paths were not validated as project-relative.**
+   - **Fix:** `solution`, `acProject`, `acSurfaceProjects` and `unitTestProjects` now pass the same check as the
+     other paths: no absolute, drive-letter or `..` paths. They are normalised on load.
+   - New tests.
+6. **Medium, valid: `smoke_test.py end` deleted the temporary smoke feature even when a real run's marker was
+   active.**
+   - **Fix:** with a real marker it now leaves both the marker and `specs/999-speckit-ac-smoke` alone.
+   - Test extended.
+7. **Previously missed; valid in part: the judge marker stays after `/speckit-ac-tests-analyze` stops before the
+   judge.**
+   - It can't launch a judge: no task message exists before step 9, which WORKFLOW §3.9 already said. But it did
+     make `/speckit-ac-init smoke` refuse to start after an all-pass run.
+   - **Fix:** a new `changed_files.py clear` ends a run that never started its subagent; it refuses a smoke marker.
+     tests-analyze runs it at all three stops before the judge (build failure, no TRX, every test passed).
+   - New tests. WORKFLOW §3.9 and CONFIG.md updated.
+
+The spec-input finding from the first review is listed as open again, with no new comment. The fix from round 1
+stands, with its tests.
+
 ## Not covered
 
 - A Habit Tracker feature through the flow (out of scope; the first feature is course work). In particular, the

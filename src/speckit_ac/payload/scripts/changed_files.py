@@ -1,6 +1,9 @@
 """Detect files an AC subagent changed outside its write allowlist (docs/WORKFLOW.md §3).
 
-Usage: changed_files.py snapshot | check <ac-feature-translator|ac-test-writer|ac-test-fail-judge>
+Usage: changed_files.py snapshot | check <ac-feature-translator|ac-test-writer|ac-test-fail-judge> | clear
+`clear` ends a run that stopped before its subagent started (for example /speckit-ac-tests-analyze when every test
+passed): it deletes the active-run marker, so no AC subagent can start with that run's task message. A smoke-test marker
+is left alone.
 Content hashes, not `git status`: git status can't see a second change to an already-modified file, or writes to
 ignored paths. The snapshot is kept in the git directory, so it is not part of the working tree it describes.
 The allowlist comes from the active-run marker (.workflow/active-run.json), the same rules the guard enforces.
@@ -74,10 +77,28 @@ def check(root, cfg, role):
         (root / aclib.MARKER).unlink(missing_ok=True)
 
 
+def clear(root: Path):
+    """End a run whose subagent was never started: delete the marker (a smoke-test marker belongs to smoke_test.py)."""
+    path = root / aclib.MARKER
+    try:
+        marker = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        print("No active run")
+        return
+    except (OSError, ValueError):
+        marker = None
+    if isinstance(marker, dict) and marker.get("smoke"):
+        raise aclib.AcError(f"{aclib.MARKER} is a smoke-test marker; smoke_test.py end removes it.")
+    path.unlink(missing_ok=True)
+    print(f"Active run ended ({aclib.MARKER} deleted)")
+
+
 def main():
-    usage = f"Usage: changed_files.py snapshot | check <{'|'.join(aclib.ROLES)}>"
+    usage = f"Usage: changed_files.py snapshot | check <{'|'.join(aclib.ROLES)}> | clear"
     root = aclib.root(__file__)
-    if sys.argv[1:] == ["snapshot"]:
+    if sys.argv[1:] == ["clear"]:
+        clear(root)
+    elif sys.argv[1:] == ["snapshot"]:
         cfg = aclib.load_config(root)
         hashes = tree_hashes(root, cfg)
         snapshot_file(root).write_text(json.dumps(hashes), encoding="utf-8")

@@ -20,6 +20,8 @@ import aclib  # noqa: E402
 
 ROOT = None  # the project root, set by main() (not at import, so the pure functions can be imported by tests)
 CONFIGURATION = "Debug"
+# Build output folders only (bin, obj, obj-ref, bin_x, …); not source folders such as Bindings/ or objectives/.
+BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)
 # Statements that can't appear in a reference-assembly listing, where every body is `throw null`.
 LOGIC = re.compile(r"\breturn\b|\bif\s*\(|\bfor(each)?\s*\(|\bwhile\s*\(|\bswitch\b|\bawait\b|\btry\b")
 # A type declaration as ilspycmd writes it: tab indentation, modifiers, keyword. Body braces are on their own lines.
@@ -55,7 +57,7 @@ def with_dependencies(projects):
 def check_no_internals_visible_to(project):
     folder = project.parent
     candidates = [f for f in folder.rglob("*") if f.suffix in (".cs", ".csproj", ".props", ".targets")
-                  and not any(re.match(r"(bin|obj)", s, re.IGNORECASE) for s in f.relative_to(folder).parts)]
+                  and not any(BUILD_FOLDER.match(s) for s in f.relative_to(folder).parts[:-1])]
     candidates += [ROOT / n for n in ("Directory.Build.props", "Directory.Build.targets") if (ROOT / n).is_file()]
     hits = [f.relative_to(ROOT).as_posix() for f in candidates
             if "InternalsVisibleTo" in f.read_text(encoding="utf-8", errors="replace")]

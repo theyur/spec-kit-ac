@@ -30,7 +30,7 @@ RUN_SCRIPT = {"translate": ("new_run.py", "translate"), "tests-write": ("new_run
               "tests-analyze": ("new_analyze.py", None)}
 # Subcommands each script accepts (its argparse choices / usage); a command may use only these.
 SUBCOMMANDS = {"ac_lock.py": {"lock", "verify", "unlock", "confirm-spec"}, "new_run.py": {"translate", "write"},
-               "changed_files.py": {"snapshot", "check"}, "clear_generated.py": {"features", "steps"},
+               "changed_files.py": {"snapshot", "check", "clear"}, "clear_generated.py": {"features", "steps"},
                "smoke_test.py": {"start", "end", "isolation-file"}}
 # Step order inside "## Steps" (a subsequence: other mentions may sit in between).
 STEP_ORDER = {
@@ -237,6 +237,9 @@ def test_tests_analyze_rules():
     assert "`--only-current`" in content and "`ac_feature.py --all`" in content
     assert "**that exists**" in content  # only existing locks of other features are verified
     assert "only the number of errors and their codes" in content
+    # Copilot on HT PR 16: every stop between new_analyze.py and the judge ends the run (build, no TRX, all passed)
+    steps = content.split(" 9. Start the judge", 1)[0].split(" 5. Run `new_analyze.py", 1)[1]
+    assert steps.count("`changed_files.py clear`") == 4  # the rule + the three stops
     for verdict in ("TRANSLATION_FAULT", "IMPLEMENTATION_FAULT", "TEST_FAULT", "SPEC_AMBIGUITY", "UNEXPRESSIBLE",
                     "SUPERSEDED", "INCONCLUSIVE"):
         assert f"`{verdict}`" in content

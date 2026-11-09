@@ -7,8 +7,10 @@ active-run marker written by the run scripts. Templates are filled mechanically 
 config by task_message.py (the script the commands use), so renaming a key on either side fails here.
 """
 
+import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -312,8 +314,14 @@ def test_pending_prefixes_are_counted_as_pending():
 @pytest.mark.parametrize("role", [T, W, J])
 def test_final_message_rule_passes_the_handback_screen(role):
     """The final-message instruction itself must not need what the guard's hand-back screen blocks."""
-    guard = (PAYLOAD / "hooks/guard.py").read_text(encoding="utf-8")
-    code = re.compile(re.search(r'^CODE = re\.compile\(r"(.*)"\)$', guard, re.MULTILINE)[1])
+    previous, sys.dont_write_bytecode = sys.dont_write_bytecode, True  # no __pycache__ in the payload
+    try:
+        spec = importlib.util.spec_from_file_location("guard_code", PAYLOAD / "hooks/guard.py")
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+    finally:
+        sys.dont_write_bytecode = previous
+    code = guard.CODE
     final = [p.replace("\n", " ") for p in text(role).split("\n\n") if p.startswith("Your final message back:")]
     assert len(final) == 1 and not code.search(final[0])
     assert role == J or "No " in final[0]

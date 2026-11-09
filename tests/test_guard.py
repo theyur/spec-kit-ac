@@ -121,6 +121,18 @@ CT_CASES = [
      BOTH, DENY),
     ("judge hands back its table", J, "SubagentHandback", {"message": "| @AC-001 | TEST_FAULT | high | wrong table |"},
      BOTH, ALLOW),
+    # Copilot on HT PR 16: qualified attributes and plain declarations are code too
+    ("writer hands back a qualified binding", W, "SubagentHandback",
+     {"message": "[Reqnroll.Binding, Reqnroll.Scope(Tag = \"F001\")] steps"}, BOTH, DENY),
+    ("writer hands back a global:: attribute", W, "SubagentHandback",
+     {"message": '[global::Reqnroll.ThenAttribute("the total is {decimal}")]'}, BOTH, DENY),
+    ("writer hands back a method", W, "SubagentHandback",
+     {"message": "Bound it with public void ThenTheTotalIs(decimal total) and an assert."}, BOTH, DENY),
+    ("writer hands back a class", W, "SubagentHandback", {"message": "public sealed class DiscountSteps {"}, BOTH, DENY),
+    ("judge hands back an expression body", J, "SubagentHandback", {"message": "Then() => Assert.Equal(90m, t)"},
+     BOTH, DENY),
+    ("judge hands back a summary with signatures in words", J, "SubagentHandback",
+     {"message": "2 failures: F001/AC-001 IMPLEMENTATION_FAULT (high). Report: judge-report.md."}, BOTH, ALLOW),
     ("Explore hands back a step-definition path", "Explore", "SubagentHandback",
      {"message": f"Could not read {AC}/StepDefinitions/F001/A.cs"}, NONE, DENY),
     ("Explore hands back a summary", "Explore", "SubagentHandback", {"message": "The read was blocked."}, NONE, ALLOW),
@@ -448,10 +460,21 @@ def test_missing_config_allows_main_but_not_ac_roles_or_ac_skills(tmp_path):
     json.dumps([CONFIG]),
     json.dumps({k: v for k, v in CONFIG.items() if k != "testFramework"}),
     json.dumps({**CONFIG, "testFramework": "xunit"}),
+    json.dumps({**CONFIG, "refsDir": "src/refs"}),
+    json.dumps({**CONFIG, "refsDir": AC}),
+    json.dumps({**CONFIG, "refsDir": "tests"}),
+    json.dumps({**CONFIG, "refsDir": ".git/refs"}),
+    json.dumps({**CONFIG, "refsDir": "specs/refs"}),
+    json.dumps({**CONFIG, "solution": "../other/App.slnx"}),
+    json.dumps({**CONFIG, "acProject": "C:/elsewhere/App.AcceptanceTests.csproj"}),
+    json.dumps({**CONFIG, "acSurfaceProjects": ["../../other/Secret.csproj"]}),
+    json.dumps({**CONFIG, "unitTestProjects": ["/abs/App.Tests.csproj"]}),
 ], ids=["broken json", "schema 2", "missing key", "acProjectDir with ..", "acProjectDir .", "acProjectDir tests/..",
         "specInputs ./", "specInputs specs", "specInputs a feature", "specInputs contains the AC project",
         "specInputs inside refs", "specInputs .workflow", "absolute refsDir", "specInputs not a list",
-        "not an object", "testFramework missing", "testFramework unknown"])
+        "not an object", "testFramework missing", "testFramework unknown", "refsDir in src", "refsDir = AC project",
+        "refsDir contains the AC project", "refsDir in .git", "refsDir in specs", "solution outside",
+        "acProject absolute", "surface outside", "unit tests absolute"])
 def test_invalid_config_blocks_everything(tmp_path, config):
     project = config_project(tmp_path, config)
     code, reason = call(project, MAIN, "Read", {"file_path": str(project / "src/a.cs")})
@@ -481,6 +504,21 @@ def test_spec_input_beside_the_code_is_fine(tmp_path):
     project = config_project(tmp_path, {**CONFIG, "specInputs": ["docs/domain"]})
     write(project / "lib/Core/Core.csproj", "<Project />\n")
     write(project / "docs/domain/bin/Debug/Copied.csproj", "<Project />\n")  # build output is not a project folder
+    assert call(project, MAIN, "Read", {"file_path": str(project / "README.md")})[0] == ALLOW
+
+
+def test_refs_dir_in_a_project_folder_blocks_everything(tmp_path):
+    """Copilot on HT PR 16: export_refs.py deletes refsDir, so it must not overlap a project folder."""
+    project = config_project(tmp_path, {**CONFIG, "refsDir": "lib/Core/refs"})
+    write(project / "lib/Core/Core.csproj", "<Project />\n")
+    code, reason = call(project, MAIN, "Read", {"file_path": str(project / "README.md")})
+    assert code == DENY and "refsDir lib/Core/refs overlaps the implementation folder lib/Core" in reason
+
+
+def test_refs_dir_beside_a_root_project_is_fine(tmp_path):
+    """A single-project repository has its .csproj at the root; the refs folder is still allowed there."""
+    project = config_project(tmp_path, {**CONFIG, "specInputs": []})
+    write(project / "App.csproj", "<Project />\n")
     assert call(project, MAIN, "Read", {"file_path": str(project / "README.md")})[0] == ALLOW
 
 

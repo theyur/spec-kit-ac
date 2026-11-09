@@ -75,9 +75,9 @@ def read_marker_raw(root: Path):
 
 def start(root: Path, cfg: dict, role: str):
     if (root / aclib.MARKER).exists():
-        raise aclib.AcError(f"{aclib.MARKER} exists: an AC run did not finish (it stays, for example, after "
-                            "/speckit-ac-tests-analyze when every test passed, or when a command stopped before its "
-                            "check). Ask the user to delete that file by hand, then start the smoke test again.")
+        raise aclib.AcError(f"{aclib.MARKER} exists: an AC run did not finish (it stays, for example, when a "
+                            "command was interrupted before its check). Ask the user to delete that file by hand, then "
+                            "start the smoke test again.")
     specs = root / "specs"
     taken = sorted(specs.glob(f"{NUMBER}-*")) if specs.is_dir() else []
     if taken:
@@ -128,8 +128,8 @@ def end(root: Path, cfg: dict, role: str):
             print(f"No marker ({aclib.MARKER}): nothing to evaluate. Cleaning up.")
             ok = False
         elif not (isinstance(marker, dict) and marker.get("smoke") and marker.get("feature") == FEATURE_DIR):
-            print(f"{aclib.MARKER} is not a smoke-test marker; it is left alone. If no AC command is running, ask the "
-                  "user to delete it by hand.")
+            print(f"{aclib.MARKER} is not a smoke-test marker; it and {FEATURE_DIR} are left alone. If no AC command "
+                  "is running, ask the user to delete both by hand.")
             ok = False
         elif marker.get("role") != role:
             print(f"The smoke marker is for {marker.get('role')}, not {role}.")
@@ -138,9 +138,10 @@ def end(root: Path, cfg: dict, role: str):
             report, ok = evaluate(role, cfg, log_lines(root)[int(marker.get("smokeLogLines", 0)):])
             print("\n".join(report))
     finally:
+        # A real run's marker means an AC command may be running: leave everything alone then.
         if marker is None or (isinstance(marker, dict) and marker.get("smoke")):
             (root / aclib.MARKER).unlink(missing_ok=True)
-        shutil.rmtree(root / FEATURE_DIR, ignore_errors=True)
+            shutil.rmtree(root / FEATURE_DIR, ignore_errors=True)
     print(f"Smoke test {role}: {'PASS' if ok else 'FAIL'}")
     if not ok:
         sys.exit(1)

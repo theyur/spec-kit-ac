@@ -22,7 +22,16 @@ AC_ROLES = (TRANSLATOR, WRITER, JUDGE)
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 SHELL_TOOLS = ("Bash", "PowerShell")  # main agent only; the AC roles have no PowerShell, and only one Bash command
 HANDBACK = "SubagentHandback"  # how a subagent delivers its final message to the main agent
-CODE = re.compile(r"```|\[(Binding|Given|When|Then|StepArgumentTransformation)\b")
+# Code in a hand-back: a fence, a Reqnroll attribute (also qualified: [Reqnroll.Binding], [global::Reqnroll.Then]),
+# a C# member or type declaration with an access modifier, or an expression-bodied member. Markers only: prose that
+# describes code still passes (WORKFLOW §6); the prompts ask for a short summary.
+CODE = re.compile(
+    r"```"
+    r"|\[\s*(?:global::)?(?:\w+\.)*(?:Binding|Given|When|Then|StepArgumentTransformation|BeforeScenario|AfterScenario"
+    r"|BeforeFeature|AfterFeature|BeforeTestRun|AfterTestRun|Scope)(?:Attribute)?\b"
+    r"|\b(?:public|private|protected|internal)\s+(?:(?:static|async|override|virtual|sealed|partial|readonly|abstract)"
+    r"\s+)*[\w.<>\[\],?]+\s+\w+\s*[({]"
+    r"|\)\s*=>")
 AC_ROLE_SUFFIX = (" This restriction is intentional. Do not try to work around it."
                   " If you cannot continue, record the problem in your report.")
 CONSTITUTION = ".specify/memory/constitution.md"
@@ -128,9 +137,18 @@ def load_config(root):
     for key, allowed in ENUM_KEYS.items():
         if cfg.get(key) not in allowed:
             raise ValueError(f"{CONFIG}: missing or invalid key {key} (one of {', '.join(allowed)})")
-    for key in ("acProjectDir", "refsDir"):
+    for key in ("solution", "acProjectDir", "acProject", "refsDir"):
         cfg[key] = relative_clean(cfg[key], key)
-    cfg["specInputs"] = [relative_clean(value, "specInputs") for value in cfg["specInputs"]]
+    for key in ("specInputs", "acSurfaceProjects", "unitTestProjects"):
+        cfg[key] = [relative_clean(value, key) for value in cfg[key]]
+    # export_refs.py deletes refsDir before every export, so it must hold nothing else (same rule as aclib).
+    for folder in ("specs", ".specify", ".workflow", ".git", cfg["acProjectDir"]):
+        if overlaps(cfg["refsDir"], folder):
+            raise ValueError(f"{CONFIG}: refsDir {cfg['refsDir']} overlaps {folder}; it is deleted before every export")
+    folder = implementation_overlap(root, cfg["refsDir"], root_project=False)
+    if folder is not None:
+        raise ValueError(f"{CONFIG}: refsDir {cfg['refsDir']} overlaps the implementation folder {folder}; it is "
+                         "deleted before every export")
     protected = ["specs", ".specify", ".workflow", cfg["acProjectDir"], cfg["refsDir"]]
     for value in cfg["specInputs"]:
         for folder in protected:
@@ -153,13 +171,14 @@ def overlaps(a, b):
 BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)
 
 
-def implementation_overlap(root, value):
-    """The implementation folder (`src`, or a folder holding a .csproj) that spec input `value` equals, contains or
-    lies inside, or None (same rule as aclib.implementation_overlap). The config is changed by hand after init."""
+def implementation_overlap(root, value, root_project=True):
+    """The implementation folder (`src`, or a folder holding a .csproj) that `value` equals, contains or lies inside,
+    or None (same rule as aclib.implementation_overlap). The config is changed by hand after init.
+    `root_project=False` ignores a .csproj at the root itself."""
     if overlaps(value, "src"):
         return "src"
     parts = value.split("/")
-    for depth in range(len(parts) + 1):
+    for depth in range(0 if root_project else 1, len(parts) + 1):
         folder = Path(root, *parts[:depth])
         if folder.is_dir() and any(folder.glob("*.csproj")):
             return "/".join(parts[:depth]) or "."

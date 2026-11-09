@@ -25,6 +25,9 @@ TRANSLATOR, WRITER, JUDGE = "ac-feature-translator", "ac-test-writer", "ac-test-
 ROLES = (TRANSLATOR, WRITER, JUDGE)
 FEATURE_NAME = re.compile(r"^(\d{3,})-.+$")
 TIMESTAMP_NAME = re.compile(r"^\d{8}-\d{6}-")
+# Project-relative paths below the root (no absolute, drive-letter or `..` paths), normalised on load.
+PATH_KEYS = ("solution", "acProjectDir", "acProject", "refsDir")
+PATH_LIST_KEYS = ("specInputs", "acSurfaceProjects", "unitTestProjects")
 _BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)  # bin, obj, obj-ref, … (as init_config)
 V1_LIMIT = ("spec-kit-ac v1.0 supports only sequentially numbered feature folders directly under specs/ "
             "(specs/NNN-name).")
@@ -82,13 +85,14 @@ def load_config(root_dir: Path) -> dict:
     return validate_config(cfg, root_dir)
 
 
-def implementation_overlap(root_dir: Path, value: str):
-    """The implementation folder (`src`, or a folder holding a .csproj) that spec input `value` equals, contains or
-    lies inside, or None. Checked on every load, because the config is changed by hand after init."""
+def implementation_overlap(root_dir: Path, value: str, root_project: bool = True):
+    """The implementation folder (`src`, or a folder holding a .csproj) that `value` equals, contains or lies inside,
+    or None. Checked on every load, because the config is changed by hand after init. `root_project=False` ignores a
+    .csproj at the root itself (the refs folder of a single-project repository)."""
     if _overlaps(value, "src"):
         return "src"
     parts = value.split("/")
-    for depth in range(len(parts) + 1):
+    for depth in range(0 if root_project else 1, len(parts) + 1):
         folder = root_dir.joinpath(*parts[:depth])
         if folder.is_dir() and any(folder.glob("*.csproj")):
             return "/".join(parts[:depth]) or "."
@@ -115,9 +119,18 @@ def validate_config(cfg, root_dir: Path | None = None) -> dict:
     for key, allowed in ENUM_KEYS.items():
         if cfg.get(key) not in allowed:
             raise AcError(f"{CONFIG}: missing or invalid key {key} (one of {', '.join(allowed)})")
-    cfg["acProjectDir"] = _relative_clean(cfg["acProjectDir"], "acProjectDir")
-    cfg["refsDir"] = _relative_clean(cfg["refsDir"], "refsDir")
-    cfg["specInputs"] = [_relative_clean(v, "specInputs") for v in cfg["specInputs"]]
+    for key in PATH_KEYS:
+        cfg[key] = _relative_clean(cfg[key], key)
+    for key in PATH_LIST_KEYS:
+        cfg[key] = [_relative_clean(v, key) for v in cfg[key]]
+    # export_refs.py deletes refsDir before every export, so it must hold nothing else.
+    for folder in ("specs", ".specify", ".workflow", ".git", cfg["acProjectDir"]):
+        if _overlaps(cfg["refsDir"], folder):
+            raise AcError(f"{CONFIG}: refsDir {cfg['refsDir']} overlaps {folder}; it is deleted before every export")
+    folder = implementation_overlap(root_dir, cfg["refsDir"], root_project=False) if root_dir is not None else None
+    if folder is not None:
+        raise AcError(f"{CONFIG}: refsDir {cfg['refsDir']} overlaps the implementation folder {folder}; it is deleted "
+                      "before every export")
     protected = ["specs", ".specify", ".workflow", cfg["acProjectDir"], cfg["refsDir"]]
     for value in cfg["specInputs"]:
         for folder in protected:

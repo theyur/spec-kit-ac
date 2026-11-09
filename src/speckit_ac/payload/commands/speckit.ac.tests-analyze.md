@@ -66,19 +66,22 @@ Follow the steps exactly. Stop at the first failure and report it.
 4. Check that the current feature's latest `run-NNN` folder (in `runsDir`; not `translate-NNN`) has
    `writer-report.md`. If not: stop and point to `/speckit-ac-tests-write`.
 5. Run `new_analyze.py <feature-arg>` and note the analyze folder (`<analyze>`). This is step 1 of
-   starting the judge; continue with step 2 there only in step 9.
+   starting the judge; continue with step 2 there only in step 9. From here on, **every stop before
+   step 9 first runs `changed_files.py clear`**: it ends the run, so no judge can start later with this
+   run's task message.
 6. Build the AC project normally: `dotnet build <acProject> -nologo -v q` (`acProject` from the
    config; no `AcRefMode`; the AC project is not in the solution, so build it by path). If it does not
-   compile: the public API probably changed after the reference assemblies were exported. Report only
-   the number of errors and their codes and point to `/speckit-ac-tests-write`. Stop.
+   compile: the public API probably changed after the reference assemblies were exported. Run
+   `changed_files.py clear`, report only the number of errors and their codes and point to
+   `/speckit-ac-tests-write`. Stop.
 7. Run `acTestCommand` from the config with `{acProject}` and `{analyzeDir}` (= `<analyze>`) filled
    in. It writes `<analyze>/ac-results.trx`. A non-zero exit code only means that tests failed; go on.
-   If `<analyze>/ac-results.trx` does not exist: stop and report.
+   If `<analyze>/ac-results.trx` does not exist: run `changed_files.py clear`, then stop and report.
 8. Run `summarize_trx.py <analyze>/ac-results.trx <analyze>/ac-results.md --current <tag>`, and add
    `--only-current` when the input contains `--current`. Note the counts it prints.
-   If every result passed (pending counts as failed): report the totals and the AC ids skipped at
-   translation (`skipped.json` in the current feature's latest `translate-NNN` folder, if any), then
-   stop.
+   If every result passed (pending counts as failed): run `changed_files.py clear`, report the totals
+   and the AC ids skipped at translation (`skipped.json` in the current feature's latest
+   `translate-NNN` folder, if any), then stop.
 9. Start the judge (Rules, steps 2–5; step 1 ran in step 5).
 10. Run `extract_feedback.py <analyze>/judge-report.md <analyze>/writer-feedback.md`.
 11. Report to the user:

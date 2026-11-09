@@ -201,10 +201,12 @@ a matching marker is denied every call.
    `.workflow/active-run.json` right before a subagent starts; the guard pins all of that role's paths
    to it and denies the role when the marker is missing, for another role or malformed. The run ends at
    `changed_files.py check`, which deletes the marker: afterwards nothing can start or act as an AC
-   role until the next run script. A marker can outlive a command only when the command stops before
-   that check — after `new_analyze.py` when every test passed (no task message: no launch possible),
-   or between `task_message.py` and the check (the same launch stays possible until the next run
-   script overwrites the marker).
+   role until the next run script. `/speckit-ac-tests-analyze` ends a run that stops before its judge
+   (build failure, no TRX, every test passed) with `changed_files.py clear`. A marker can still
+   outlive a command that is interrupted before its check:
+   - after `new_analyze.py`: no task message yet, so no launch is possible;
+   - between `task_message.py` and the check: the same launch stays possible until the next run script
+     overwrites the marker.
 10. **The main agent never starts `/speckit-ac-*` itself.** The deploy step marks those skills
     human-only and the guard blocks a main-agent `Skill` call for them; users type the command.
 
@@ -287,8 +289,15 @@ a matching marker is denied every call.
 - Exception messages from the implementation reach the judge through `ac-results.md`. They don't
   reach the writer only because the judge is told to keep observed values out of the feedback
   section. The script that extracts the feedback is deterministic; its content is not.
-- The hand-back screen catches code by its markers only. A subagent could still describe
-  step-definition logic in prose in its final message; its prompt forbids it.
+- The hand-back screen catches code by its markers only:
+  - fences;
+  - Reqnroll attributes, also qualified (`[Reqnroll.Binding]`);
+  - C# declarations with an access modifier;
+  - expression bodies.
+
+  A subagent could still describe step-definition logic in prose in its final message; its prompt forbids
+  it. A summary that happens to look like a declaration (`public API Total(…)`) is denied, and the
+  subagent hands back again.
 - The guard depends on the Python interpreter being found and on the folder being trusted.
   `onFailure: "block"` and the live guard smoke test (`/speckit-ac-init smoke`) cover this.
 - Locks hash the bytes on disk. `.gitattributes` pins LF for the hashed text files, but a file saved

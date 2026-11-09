@@ -112,6 +112,18 @@ def test_spec_inputs_overlapping_protected_folders_fail(project):
     failed(run_script(project, "ac_feature.py"), 1, "overlaps tests/App.AcceptanceTests")
 
 
+@pytest.mark.parametrize("change, message", [
+    ({"refsDir": "src/refs"}, "refsDir src/refs overlaps the implementation folder src"),
+    ({"refsDir": AC}, f"refsDir {AC} overlaps {AC}"),
+    ({"acSurfaceProjects": ["../../other/Secret.csproj"]}, "key acSurfaceProjects must be a project-relative path"),
+    ({"solution": "C:/elsewhere/App.slnx"}, "key solution must be a project-relative path"),
+])
+def test_unsafe_config_paths_fail(project, change, message):
+    """Copilot on HT PR 16: export_refs.py deletes refsDir; dotnet must never get a path outside the checkout."""
+    write(project / ".workflow/config.json", json.dumps({**CONFIG, **change}))
+    failed(run_script(project, "ac_feature.py"), 1, message)
+
+
 @pytest.mark.parametrize("spec_input, folder", [("src/App.Core", "src"), ("lib/Core/notes.md", "lib/Core"),
                                                 ("lib", "lib/Core")])
 def test_spec_inputs_overlapping_the_code_fail(project, spec_input, folder):
@@ -276,6 +288,19 @@ def test_changed_files_allowlist(git_project):
     ok(run_script(p, "new_run.py", "write"))
     failed(run_script(p, "changed_files.py", "check", "ac-test-fail-judge"), 1, "active run is for ac-test-writer")
     assert marker.is_file()
+
+
+def test_changed_files_clear_ends_a_run_without_a_subagent(project):
+    """Copilot on HT PR 16: tests-analyze stopping before the judge (all passed) must not leave its marker behind."""
+    marker = project / ".workflow/active-run.json"
+    assert "No active run" in ok(run_script(project, "changed_files.py", "clear"))
+    ok(run_script(project, "new_run.py", "write"))  # tests-analyze needs a writer run first
+    ok(run_script(project, "new_analyze.py"))
+    assert marker.is_file()
+    assert "Active run ended" in ok(run_script(project, "changed_files.py", "clear")) and not marker.exists()
+    write(marker, json.dumps({"smoke": True, "role": "ac-test-writer"}))
+    failed(run_script(project, "changed_files.py", "clear"), 1, "smoke-test marker")
+    assert marker.is_file()  # smoke_test.py end owns it
 
 
 def test_changed_files_feature_files_and_ignored_folders(git_project):
@@ -573,6 +598,23 @@ def test_logic_detection(export_refs):
     assert export_refs.LOGIC.search("\t\t\treturn x;")
     assert export_refs.LOGIC.search("if (a)")
     assert not export_refs.LOGIC.search("\t\t\tthrow null;")
+
+
+def test_internals_visible_to_found_in_folders_named_like_build_output(export_refs, tmp_path, monkeypatch):
+    """Copilot on HT PR 16: Bindings/ or objectives/ are source folders; only bin/, obj/, obj-ref/ … are skipped."""
+    monkeypatch.setattr(export_refs, "ROOT", tmp_path)
+    project = tmp_path / "src/Core/Core.csproj"
+    for rel, text in [("src/Core/Core.csproj", "<Project />"), ("src/Core/obj-ref/Gen.cs", "InternalsVisibleTo"),
+                      ("src/Core/bin/Debug/Gen.cs", "InternalsVisibleTo")]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text, encoding="utf-8")
+    export_refs.check_no_internals_visible_to(project)  # build output only: passes
+    for folder in ("Bindings", "objectives"):
+        (tmp_path / f"src/Core/{folder}").mkdir()
+        (tmp_path / f"src/Core/{folder}/Friends.cs").write_text('[assembly: InternalsVisibleTo("T")]', encoding="utf-8")
+        with pytest.raises(SystemExit, match=f"src/Core/{folder}/Friends.cs"):
+            export_refs.check_no_internals_visible_to(project)
+        (tmp_path / f"src/Core/{folder}/Friends.cs").unlink()
 
 
 def test_export_refs_needs_config(project):

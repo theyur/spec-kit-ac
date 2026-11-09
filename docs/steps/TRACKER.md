@@ -171,6 +171,15 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
 
     The third finding, the root `dotnet-tools.json`, was a false positive: a fresh clone restores and runs ilspycmd.
     Details in the results file.
+  - **Copilot re-review on PR 16:** 7 findings. Fixed in the package and deployed with `speckit-ac upgrade`:
+    - the hand-back screen also catches qualified attributes and declarations;
+    - `export_refs.py` matches only real `bin` / `obj` folders;
+    - `refsDir` may not overlap source, the AC project or the spec-kit folders;
+    - every project and solution path must be project-relative;
+    - `smoke_test.py end` leaves a real run alone;
+    - `/speckit-ac-tests-analyze` ends its run with the new `changed_files.py clear` when it stops before the judge.
+
+    The xunit3/MTP TRX finding was a false positive: the opt-in end-to-end test passes. Details in the results file.
   - **Candidate follow-up:** init's spec-input question steered toward `SPEC.md` and away from ADR 0003 (it says
     "describe the domain"). Name test-environment documents as allowed inputs (DESIGN §4 wording).
   - Not observed: a hook timeout on a cold uv start (the cache was warm; the guard took ≈ 0.1–0.3 s per call).

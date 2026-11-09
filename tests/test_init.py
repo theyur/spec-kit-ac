@@ -653,9 +653,11 @@ def test_smoke_end_without_or_with_a_foreign_marker(tmp_path):
     assert result.returncode == 1 and "nothing to evaluate" in result.stdout and not (project / SMOKE).exists()
     foreign = json.dumps({"role": W, "feature": "specs/001-alpha", "tag": "F001", "run": "run-001", "analyze": None})
     write(project / ".workflow/active-run.json", foreign)
+    write(project / SMOKE / "spec.md")
     result = run_script(project, "smoke_test.py", "end", W)
     assert result.returncode == 1 and "not a smoke-test marker" in result.stdout
     assert (project / ".workflow/active-run.json").read_text(encoding="utf-8") == foreign  # left alone
+    assert (project / SMOKE / "spec.md").is_file()  # Copilot on HT PR 16: a real run may be active, so nothing goes
 
 
 def test_smoke_start_refusals(tmp_path):
