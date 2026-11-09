@@ -261,8 +261,11 @@ a matching marker is denied every call.
 
 ## 6. Known limits
 
-- The guard works on tool calls. The main agent could still reach step definitions with a Bash
-  command that doesn't name them (e.g. a recursive `grep` over the test folder), or change a
+- The guard works on tool calls. It reads a shell command as text and catches the plain forms:
+  `<ac>/StepDefinitions/…` (also spelled with `./`, `//` or `\`), and a command that names the AC
+  folder together with `StepDefinitions` or `Support/` (`cd <ac> && cat Support/…`). The main agent
+  could still reach step definitions with a Bash command that doesn't name them (a variable, a glob,
+  a recursive `grep` over the test folder), or change a
   `.feature` with Bash or an IDE edit tool. These stay soft rules in `CLAUDE.md`. A main-agent
   `Grep` over the whole repo is blocked only if its `path` points into the AC folders. Bash can also
   write the files the guard denies to the main agent's tools (locks, `runs/`, `<refsDir>`, the

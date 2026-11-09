@@ -119,6 +119,9 @@ def test_spec_inputs_overlapping_protected_folders_fail(project):
     ({"solution": "C:/elsewhere/App.slnx"}, "key solution must be a project-relative path"),
     ({"acProject": "src/App.Core/App.Core.csproj"}, "must be a .csproj directly inside acProjectDir"),
     ({"acRefBuildCommand": "dotnet build src/App.Core/App.Core.csproj"}, "acRefBuildCommand must be exactly"),
+    ({"acProjectDir": "src/App.Core", "acProject": "src/App.Core/App.Core.csproj",
+      "acRefBuildCommand": "dotnet build src/App.Core/App.Core.csproj -p:AcRefMode=true -nologo -v q"},
+     "acProjectDir src/App.Core overlaps src"),
 ])
 def test_unsafe_config_paths_fail(project, change, message):
     """Copilot on HT PR 16: export_refs.py deletes refsDir; dotnet must never get a path outside the checkout."""

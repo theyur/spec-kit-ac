@@ -524,6 +524,40 @@ def test_unsafe_ac_project_blocks_everything(tmp_path, change, needle):
     assert code == DENY and needle in reason
 
 
+def _ac_at(folder, name, **extra):
+    return {**CONFIG, "acProjectDir": folder, "acProject": f"{folder}/{name}",
+            "acRefBuildCommand": f"dotnet build {folder}/{name} -p:AcRefMode=true -nologo -v q", **extra}
+
+
+@pytest.mark.parametrize("config, files, needle", [
+    (_ac_at("src/App.AcceptanceTests", "App.AcceptanceTests.csproj"), [], "acProjectDir src/App.AcceptanceTests overlaps src"),
+    (_ac_at("lib/Core", "Core.AcceptanceTests.csproj"), ["lib/Core/Core.csproj"], "holds another project: Core.csproj"),
+    (_ac_at("lib/Core", "Core.csproj", acSurfaceProjects=["lib/Core/Core.csproj"]), ["lib/Core/Core.csproj"],
+     "acProject lib/Core/Core.csproj is a surface or unit-test project"),
+], ids=["under src", "an existing project folder", "a surface project itself"])
+def test_ac_project_that_is_production_code_blocks_everything(tmp_path, config, files, needle):
+    """HT PR 16 follow-up: an AC folder pointed at an existing project would let the writer write into it."""
+    project = config_project(tmp_path, config)
+    for rel in files:
+        write(project / rel, "<Project />\n")
+    code, reason = call(project, MAIN, "Read", {"file_path": str(project / "README.md")})
+    assert code == DENY and needle in reason
+
+
+@pytest.mark.parametrize("command, expected", [
+    (f"cat {AC}/./StepDefinitions/F001/A.cs", DENY),
+    (f"cat {AC}/.//./Support/Shared/Ctx.cs", DENY),
+    (f"cd {AC} && cat StepDefinitions/F001/A.cs", DENY),
+    (f"cd {AC}; Get-Content Support/Shared/Ctx.cs", DENY),
+    (f"dotnet build {AC}/App.AcceptanceTests.csproj -nologo -v q", ALLOW),
+    (f'git commit -m "support the acceptance tests in {AC}"', ALLOW),  # "support" as prose, not a path
+], ids=["dot segment", "dot and double slash", "cd then StepDefinitions", "cd then Support", "build", "prose"])
+def test_main_agent_shell_paths_are_normalised(tmp_path, command, expected):
+    """HT PR 16 follow-up: `./` and a `cd` into the AC folder must not reach the step definitions."""
+    project = config_project(tmp_path, CONFIG)
+    assert call(project, MAIN, "Bash", {"command": command})[0] == expected
+
+
 def test_ac_project_inside_or_around_another_project_blocks_everything(tmp_path):
     project = config_project(tmp_path, CONFIG)
     write(project / "tests/Tests.csproj", "<Project />\n")  # a project folder above the AC project

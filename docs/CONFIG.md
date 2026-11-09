@@ -65,9 +65,10 @@ Rules checked by the guard and the scripts:
   `unitTestProjects` entry are project-relative paths below the root (normalised:
   `./tests\App.AcceptanceTests/` is stored as `tests/App.AcceptanceTests`; empty, `.`, absolute,
   drive-letter and `..` paths are invalid);
-- `acProjectDir` must not overlap `specs/`, `.specify/`, `.workflow/` or `.git/`, lie inside another
-  project folder or contain one (build output aside). `acProject` is a `.csproj` directly inside it,
-  and `acRefBuildCommand` is exactly `dotnet build <acProject> -p:AcRefMode=true -nologo -v q`.
+- `acProjectDir` must not overlap `specs/`, `.specify/`, `.workflow/`, `.git/` or `src/`, lie inside
+  another project folder or contain one (build output aside), or hold any `.csproj` but `acProject`.
+  `acProject` is a `.csproj` directly inside it and not a surface or unit-test project, and
+  `acRefBuildCommand` is exactly `dotnet build <acProject> -p:AcRefMode=true -nologo -v q`.
   Otherwise an edited config would move the writer's allowlist or widen the AC roles' only Bash command;
 - `refsDir` must not overlap `specs/`, `.specify/`, `.workflow/`, `.git/`, `acProjectDir` or an
   implementation folder (a `.csproj` at the root itself aside): `export_refs.py` deletes it before

@@ -170,6 +170,17 @@ def overlaps(a, b):
 
 
 BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)
+# `StepDefinitions` as a word, or `Support/` as a path segment ("support" alone is ordinary prose).
+ISOLATED_SEGMENT = re.compile(r"(?<![\w.-])(?:stepdefinitions(?![\w.-])|support/)", re.IGNORECASE)
+
+
+def path_text(text):
+    """Text with path spellings folded, so `AC/./StepDefinitions` or `AC\\StepDefinitions` match like
+    `AC/StepDefinitions`. Variables and globs still get through: a documented limit (WORKFLOW §6)."""
+    text = text.replace("\\", "/")
+    while "/./" in text:
+        text = text.replace("/./", "/")
+    return text
 
 
 def check_ac_project(root, cfg):
@@ -177,11 +188,13 @@ def check_ac_project(root, cfg):
     every other project folder, its .csproj directly inside, and the ref build is exactly the generated command.
     Otherwise a hand-edited config would move the writer's allowlist or widen the AC roles' only Bash command."""
     ac, project = cfg["acProjectDir"], cfg["acProject"]
-    for folder in ("specs", ".specify", ".workflow", ".git"):
+    for folder in ("specs", ".specify", ".workflow", ".git", "src"):
         if overlaps(ac, folder):
             raise ValueError(f"{CONFIG}: acProjectDir {ac} overlaps {folder}")
     if posixpath.dirname(project) != ac or not project.lower().endswith(".csproj"):
         raise ValueError(f"{CONFIG}: acProject {project} must be a .csproj directly inside acProjectDir {ac}")
+    if project.lower() in {p.lower() for p in cfg["acSurfaceProjects"] + cfg["unitTestProjects"]}:
+        raise ValueError(f"{CONFIG}: acProject {project} is a surface or unit-test project")
     expected = f"dotnet build {project} -p:AcRefMode=true -nologo -v q"
     if " ".join(cfg["acRefBuildCommand"].split()) != expected:
         raise ValueError(f"{CONFIG}: acRefBuildCommand must be exactly: {expected}")
@@ -193,6 +206,9 @@ def check_ac_project(root, cfg):
     if target.is_dir():
         for csproj in target.rglob("*.csproj"):
             rel = csproj.parent.relative_to(target).parts
+            # Another project file next to acProject: the AC folder is an existing project (src/App.Domain, …).
+            if not rel and csproj.name.lower() != posixpath.basename(project).lower():
+                raise ValueError(f"{CONFIG}: acProjectDir {ac} holds another project: {csproj.name}")
             if rel and not any(BUILD_FOLDER.match(p) for p in rel):
                 raise ValueError(f"{CONFIG}: acProjectDir {ac} contains another project: "
                                  f"{csproj.relative_to(Path(root)).as_posix()}")
@@ -240,6 +256,9 @@ class Guard:
         self.isolated = [f"{self.ac}/stepdefinitions", f"{self.ac}/support"]
         self.isolated_text = re.compile(
             re.escape(self.ac.split("/")[-1]) + r"/+(stepdefinitions|support)(?![a-z0-9_.])", re.IGNORECASE)
+        # A shell command naming the AC folder and, anywhere else, an isolated folder (`cd <ac> && cat Support/x`).
+        self.ac_name_text = re.compile(r"(?<![\w.-])" + re.escape(self.ac.split("/")[-1]) + r"(?![\w-]|\.\w)",
+                                       re.IGNORECASE)
 
     # ---- paths -------------------------------------------------------------------------------------------------
 
@@ -346,13 +365,17 @@ class Guard:
             if (cwd == ac_dir or cwd.startswith(ac_dir + "/")) and re.search(
                     r"stepdefinitions|support", texts[0], re.IGNORECASE):
                 raise Deny(message)
+            # The same reach from elsewhere: `cd <ac folder> && cat StepDefinitions/…` (Copilot on HT PR 16).
+            command = path_text(texts[0])
+            if self.ac_name_text.search(command) and ISOLATED_SEGMENT.search(command):
+                raise Deny(message)
         else:
             texts = list(self.strings(self.input))
             if self.tool == "Glob":
                 texts.append(os.path.join(self.input.get("path") or self.cwd, self.input.get("pattern") or ""))
 
         for text in texts:
-            if isinstance(text, str) and self.isolated_text.search(text.replace("\\", "/")):
+            if isinstance(text, str) and self.isolated_text.search(path_text(text)):
                 raise Deny(message)
         for key in ("file_path", "notebook_path", "path"):
             value = self.input.get(key)

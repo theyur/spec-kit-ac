@@ -206,6 +206,24 @@ missed before, all in code unchanged since the first review. The user chose to f
 - **`new_run.py` / `new_analyze.py` overwrite an existing marker: by design.** WORKFLOW §3.9 makes the next run
   script the recovery path for an interrupted run. Refusing would change the step 4 marker design. That is
   deferred to a decision with the user, and it matters more now that subagents run in the background.
+  **Decided by the user:** option B (refuse). Committed in spec-kit-ac `a8986a9` and deployed to HT `5203f29`.
+
+## After the third review: two gaps found by HT's `/process-pr-feedback`
+
+The Habit Tracker session checked the fixes against `5203f29` and found two gaps the round-3 fixes left. Both are
+now closed in spec-kit-ac and deployed to HT.
+
+1. **An AC folder that is an existing project passed.** A `.csproj` directly in the AC folder was allowed (meant for
+   `acProject`), so `acProjectDir: src/HT.Domain` passed once its `acProject` and build command matched.
+   - **Fix:** both validators reject an AC folder that overlaps `src/` (as init already does), any `.csproj` in it
+     other than `acProject`, and an `acProject` that is a surface or unit-test project.
+   - New tests.
+2. **The guard's shell text rule missed `./` and `cd`.** The rule only matched `<ac>/StepDefinitions` written
+   adjacently.
+   - **Fix:** command text is normalised (`\` → `/`, `/./` → `/`) before matching. A main-agent shell command that
+     names the AC folder and also has `StepDefinitions` or `Support/` anywhere is denied, which covers
+     `cd <ac> && cat StepDefinitions/…`. Prose such as "support" is not matched.
+   - Variables and globs still get through; WORKFLOW §6 is updated. New tests: 4 denied, 2 allowed.
 
 ## Not covered
 

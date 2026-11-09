@@ -191,7 +191,11 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
     limit.
   - **Decided (user, 2026-11-09): option B.** `new_run.py` / `new_analyze.py` refuse while another run's marker
     exists, instead of replacing it. The three commands stop and report. The user ends an interrupted run with
-    `changed_files.py clear`. Recorded in WORKFLOW §3.9 and the DESIGN decision log.
+    `changed_files.py clear`. Recorded in WORKFLOW §3.9 and the DESIGN decision log. Deployed to HT `5203f29`.
+  - **Two gaps found by HT's `/process-pr-feedback`, closed:**
+    - an AC folder that is an existing project (overlaps `src/`, holds another `.csproj`, or `acProject` is a
+      surface or unit-test project) is rejected;
+    - the guard's shell rule normalises `./` and `\`, and catches `cd <ac> && cat StepDefinitions/…`.
   - **Review scope:** Copilot keeps finding issues in code unchanged since the first review. After this round,
     further package review belongs in spec-kit-ac's own repository (step 9), not the Habit Tracker PR.
   - **Candidate follow-up:** init's spec-input question steered toward `SPEC.md` and away from ADR 0003 (it says

@@ -116,11 +116,14 @@ def check_ac_project(cfg: dict, root_dir: Path | None, error=None):
     because a hand-edited config would otherwise move the writer's allowlist or widen its Bash command)."""
     error = error or AcError
     ac, project = cfg["acProjectDir"], cfg["acProject"]
-    for folder in ("specs", ".specify", ".workflow", ".git"):
+    # src/ as in init (init_config.implementation_folders): the AC project never lives among the production code.
+    for folder in ("specs", ".specify", ".workflow", ".git", "src"):
         if _overlaps(ac, folder):
             raise error(f"{CONFIG}: acProjectDir {ac} overlaps {folder}")
     if posixpath.dirname(project) != ac or not project.lower().endswith(".csproj"):
         raise error(f"{CONFIG}: acProject {project} must be a .csproj directly inside acProjectDir {ac}")
+    if project.lower() in {p.lower() for p in cfg["acSurfaceProjects"] + cfg["unitTestProjects"]}:
+        raise error(f"{CONFIG}: acProject {project} is a surface or unit-test project")
     if " ".join(cfg["acRefBuildCommand"].split()) != ac_ref_build_command(project):
         raise error(f"{CONFIG}: acRefBuildCommand must be exactly: {ac_ref_build_command(project)}")
     if root_dir is None:
@@ -134,6 +137,9 @@ def check_ac_project(cfg: dict, root_dir: Path | None, error=None):
     if target.is_dir():
         for csproj in target.rglob("*.csproj"):
             rel = csproj.parent.relative_to(target).parts
+            # Another project file next to acProject: the AC folder is an existing project (src/App.Domain, …).
+            if not rel and csproj.name.lower() != posixpath.basename(project).lower():
+                raise error(f"{CONFIG}: acProjectDir {ac} holds another project: {csproj.name}")
             if rel and not any(_BUILD_FOLDER.match(p) for p in rel):
                 raise error(f"{CONFIG}: acProjectDir {ac} contains another project: "
                             f"{csproj.relative_to(root_dir).as_posix()}")
