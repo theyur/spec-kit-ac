@@ -931,6 +931,16 @@ def test_check_acceptance_findings(acceptance, change, finding):
     assert finding in result.stdout
 
 
+@pytest.mark.parametrize("heading", [
+    "### AC-002 (FR-002, US1-AS2)",                       # no title
+    "### AC-002(FR-002, US1-AS2)Rejects",                 # no spaces around the refs
+    "### AC-002 (FR-002, US1-AS2)" + " " * 5000 + "Rejects (again)",  # long whitespace, parentheses in the title
+])
+def test_check_acceptance_item_heading_forms(acceptance, heading):
+    write(acceptance / S1 / "acceptance.md", ACCEPTANCE.replace("### AC-002 (FR-002, US1-AS2) Rejects", heading))
+    assert "OK: 2 item(s)" in ok(check_acceptance(acceptance))
+
+
 def test_check_acceptance_fr_cannot_be_marked_not_testable(acceptance):
     text = ACCEPTANCE.replace("FR-002, US1-AS2", "US1-AS2").replace(
         "| US1-AS3 |", "| FR-002 | — | Not testable through the API: internal |\n| US1-AS3 |")

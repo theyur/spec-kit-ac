@@ -118,6 +118,26 @@ def test_prerequisites_stop_install_before_any_change(project, host, payload, pr
     assert not host.commands("specify extension")
 
 
+@pytest.mark.parametrize("output, problem", [
+    ("warning: a uv notice\n3.14", None),       # warnings before the version line
+    ("Python 3.12", None),                      # a word before the version
+    ("3.14  ", None),                           # trailing spaces
+    ("3.10", "needs >= 3.11"),
+    ("", "does not start Python"),
+    ("3.14\nTraceback: boom", "does not start Python"),  # the version must be on the last line
+    ("3.14.1", "does not start Python"),       # major.minor only
+    ("1" * 20000 + ".", "does not start Python"),  # long digit run without a match: fails fast (S8786)
+])
+def test_python_version_output_shapes(project, host, payload, output, problem):
+    host.python_version = output
+    if problem is None:
+        install(project, host, payload)
+        return
+    with pytest.raises(DeployError, match="before any change") as error:
+        install(project, host, payload)
+    assert problem in str(error.value)
+
+
 def test_timeout_is_a_reported_problem(project, host, payload):
     host.fail["uv run"] = (None, "uv run --no-project timed out after 300 s")
     with pytest.raises(DeployError, match="timed out"):

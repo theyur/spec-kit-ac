@@ -187,7 +187,10 @@ def prerequisites(root: Path, host: Host) -> list[str]:
     if host.which("uv") is not None:
         code, out = host.run([*PYTHON.split(), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"], root,
                              timeout=300)
-        match = re.search(r"(\d+)\.(\d+)\s*$", (out or "").strip())
+        # The version is the last word of the last line (uv may print warnings first). An anchored full match
+        # on that one word avoids an unanchored search with backtracking (Sonar S8786).
+        lines = (out or "").strip().splitlines()
+        match = re.fullmatch(r"(\d+)\.(\d+)", lines[-1].rpartition(" ")[2]) if lines else None
         if code != 0 or not match:
             problems.append(f"`{PYTHON}` does not start Python: {tail(out, 200)}")
         elif tuple(int(n) for n in match.groups()) < MIN_PYTHON:
