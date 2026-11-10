@@ -98,8 +98,9 @@ changelog notes).
 - Pull requests go against `master`, which is protected: the checks `test (3.11)`, `test (3.14)`
   (pytest on Windows), `SonarCloud Code Analysis` and `CodeQL` must pass.
 - Copilot reviews are requested by the maintainer.
-- Pull requests from forks get no `SONAR_TOKEN`, so their Sonar job skips and the required Sonar check
-  can't pass; the maintainer reruns them from a branch.
+- Pull requests from forks get no `SONAR_TOKEN`, so their Sonar job (`Test and analyze`) skips. The
+  required `SonarCloud Code Analysis` check is posted only by SonarQube Cloud after a real analysis, so
+  it never reports and the PR stays blocked; the maintainer reruns it from a branch.
 - Releases: after `master` carries a final version and a dated `CHANGELOG.md` section, a `vX.Y.Z` tag
   triggers the release workflow, which checks the versions, runs the tests, builds and publishes the
   GitHub Release. Then `master` moves to the next `.dev0` version.

@@ -1,6 +1,6 @@
 """Release checks for spec-kit-ac (stdlib only; used by .github/workflows/release.yml).
 
-    python tools/release_check.py check <tag>            # tag == v<version>, both version fields match, not a dev version
+    python tools/release_check.py check <tag>            # tag == v<version>, both version fields match, a final X.Y.Z
     python tools/release_check.py notes <version> <out>  # write the CHANGELOG.md section of <version> to <out>
     python tools/release_check.py latest                 # print the newest released (dated) CHANGELOG version
 
@@ -14,7 +14,9 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PRERELEASE = re.compile(r"(\.dev|a|b|rc)\d*$")
+# Only a final X.Y.Z version is released. An allow-list, not a list of pre-release spellings: PEP 440 has many
+# (RC1, c1, .pre1, -alpha, .dev0, +local, …) and any one a block-list missed would be published.
+FINAL = re.compile(r"\d+\.\d+\.\d+")
 SECTION = re.compile(r"^## \[(?P<version>[^\]]+)\](?: - (?P<date>\d{4}-\d{2}-\d{2}))?[ \t]*$", re.MULTILINE)
 
 
@@ -41,8 +43,9 @@ def check(tag: str, root: Path | None = None) -> str:
     version, manifest = package_version(root), manifest_version(root)
     if manifest != version:
         raise ReleaseError(f"pyproject.toml says {version}, extension.yml says {manifest}")
-    if PRERELEASE.search(version):
-        raise ReleaseError(f"{version} is a pre-release version; release a final version")
+    if not FINAL.fullmatch(version):
+        raise ReleaseError(f"{version} is not a final X.Y.Z version (pre-release, dev, post or local); "
+                           "release a final version")
     if tag != f"v{version}":
         raise ReleaseError(f"tag {tag} does not match the package version (expected v{version})")
     return version

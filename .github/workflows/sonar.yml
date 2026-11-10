@@ -9,7 +9,9 @@
 #     defaults in sonar-project.properties.
 #
 # The job skips cleanly while SONAR_TOKEN is not set. Pull requests from forks get no secrets, so they
-# skip too and can't pass the required "SonarCloud Code Analysis" check.
+# skip too. This job's own check ("Test and analyze") is not the gate: the required "SonarCloud Code
+# Analysis" check is posted only by the SonarQube Cloud app after a real analysis (ruleset integration
+# 12526), so a skipped run leaves it missing and the PR blocked.
 # Coverage comes from `uv run --with coverage`, so pytest stays the only dev dependency (CLAUDE.md).
 
 name: SonarQube Cloud

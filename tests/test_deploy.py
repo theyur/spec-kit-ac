@@ -289,6 +289,24 @@ def test_patch_skills_refuses_a_skill_folder_that_leads_outside(project, host, p
     assert (outside / "SKILL.md").read_bytes() == before
 
 
+@pytest.mark.parametrize("linked", [".claude/skills", ".claude"])
+def test_patch_skills_refuses_a_skills_root_that_leads_outside(project, host, payload, tmp_path, linked):
+    """A linked `.claude/skills` (or `.claude`) must not make the patch write outside the project."""
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    inside = project / linked
+    outside = tmp_path / "outside" / Path(linked).name
+    shutil.copytree(inside, outside)
+    shutil.rmtree(inside)
+    os.symlink(outside, inside, target_is_directory=True)
+    skills = outside if linked == ".claude/skills" else outside / "skills"
+    before = {p: p.read_bytes() for p in skills.glob("speckit-ac-*/SKILL.md")}
+    assert before
+    with pytest.raises(DeployError, match=r"\.claude/skills leads outside the project"):
+        deploy.patch_skills(project)
+    assert {p: p.read_bytes() for p in skills.glob("speckit-ac-*/SKILL.md")} == before
+
+
 # ---- settings.json -----------------------------------------------------------------------------------------------
 
 OTHER_GROUP = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo other"}]}

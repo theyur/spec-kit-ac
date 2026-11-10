@@ -52,8 +52,8 @@ def package_version() -> str:
     return tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
 
-def is_dev(version: str) -> bool:
-    return bool(rc.PRERELEASE.search(version))
+def is_final(version: str) -> bool:
+    return bool(rc.FINAL.fullmatch(version))
 
 
 # --- the helper, on a temporary project ---------------------------------------------------------------
@@ -106,9 +106,14 @@ def test_check_refuses_a_manifest_mismatch(tmp_path):
         rc.check("v0.2.0", project(tmp_path, manifest="0.1.9"))
 
 
-@pytest.mark.parametrize("version", ["0.2.0.dev0", "0.2.0rc1", "0.2.0b2", "0.2.0a1"])
-def test_check_refuses_a_pre_release(tmp_path, version):
-    with pytest.raises(rc.ReleaseError, match="pre-release"):
+@pytest.mark.parametrize("version", [
+    "0.2.0.dev0", "0.2.0rc1", "0.2.0b2", "0.2.0a1",           # canonical pre-release and dev spellings
+    "0.2.0RC1", "0.2.0-rc1", "0.2.0c1", "0.2.0.pre1", "0.2.0alpha1", "0.2.0-beta.2", "0.2.0preview3",  # PEP 440 aliases
+    "0.2.0.dev0+local", "0.2.0+local", "0.2.0.post1",       # local and post versions
+    "0.2", "0.2.0.0", "v0.2.0", " 0.2.0",                   # not X.Y.Z
+])
+def test_check_refuses_anything_but_a_final_version(tmp_path, version):
+    with pytest.raises(rc.ReleaseError, match="not a final X.Y.Z version"):
         rc.check(f"v{version}", project(tmp_path, version=version))
 
 
@@ -167,7 +172,7 @@ def test_changelog_has_the_newest_release_and_its_notes():
     latest = rc.latest()
     assert rc.notes(latest).strip()
     version = package_version()
-    if not is_dev(version):
+    if is_final(version):
         assert latest == version
         assert rc.check(f"v{version}") == version
 

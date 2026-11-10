@@ -328,6 +328,9 @@ def patch_skills(root: Path) -> list[str]:
     if not skills:
         raise DeployError(f"spec-kit rendered no {SKILLS}/speckit-ac-*/SKILL.md (is the Claude integration set up?)")
     base = (root / SKILLS).resolve()
+    if base != root.resolve() / SKILLS:
+        # `.claude` or `.claude/skills` is itself a link: every write below would land outside the project.
+        raise DeployError(f"{SKILLS} leads outside the project; replace the link with a real folder")
     for found in skills:
         # Only SKILL.md itself may be a link (spec-kit's --dev install). A skill folder that leads outside SKILLS
         # (a directory link or junction) would make the write below land outside the project: refuse it.
