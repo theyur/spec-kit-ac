@@ -274,6 +274,21 @@ def test_patch_skills_makes_real_files(project, host, payload, symlinks):
     assert "source: ac:commands/speckit.ac.init.md" in (project / SKILL).read_text(encoding="utf-8")
 
 
+def test_patch_skills_refuses_a_skill_folder_that_leads_outside(project, host, payload, tmp_path):
+    """A speckit-ac skill folder that is a directory link must not make the patch write outside the project."""
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    folder = (project / SKILL).parent
+    outside = tmp_path / "outside" / folder.name
+    shutil.copytree(folder, outside)
+    shutil.rmtree(folder)
+    os.symlink(outside, folder, target_is_directory=True)
+    before = (outside / "SKILL.md").read_bytes()
+    with pytest.raises(DeployError, match="leads outside"):
+        deploy.patch_skills(project)
+    assert (outside / "SKILL.md").read_bytes() == before
+
+
 # ---- settings.json -----------------------------------------------------------------------------------------------
 
 OTHER_GROUP = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo other"}]}
