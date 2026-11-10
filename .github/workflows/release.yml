@@ -18,6 +18,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history and branches, so the next step can see origin/master.
+          fetch-depth: 0
+
+      # Releases are tagged on master (DESIGN §9): a tag on a commit that never passed the master PR gates
+      # stops here. This guards against tagging the wrong commit; anyone who can push tags can also change
+      # this file, so it is not access control.
+      - name: Check the tag is on master
+        shell: bash
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on master; tag a commit of master."
+            exit 1
+          fi
 
       # setup-uv publishes no major tags (v10 does not exist), so the release is pinned in full.
       # No cache: the release artifacts are built from a clean environment.

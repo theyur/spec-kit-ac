@@ -5,7 +5,10 @@ Stdlib only: the workflows are checked as text (full-line comments stripped firs
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
+import shutil
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -248,7 +251,8 @@ def test_release_workflow_publishes_last():
     assert "continue-on-error" not in text
     assert not re.search(r"^\s*if:", text, re.MULTILINE)
     assert 'python-version: "3.14"' in text and "enable-cache: false" in text
-    order = ["run: uv sync --locked", 'release_check.py check "$GITHUB_REF_NAME"', "run: uv run pytest -q --tb=short",
+    order = ["fetch-depth: 0", 'git merge-base --is-ancestor "$GITHUB_SHA" origin/master',
+             "run: uv sync --locked", 'release_check.py check "$GITHUB_REF_NAME"', "run: uv run pytest -q --tb=short",
              "run: uv build", 'release_check.py notes "${GITHUB_REF_NAME#v}" release-notes.md',
              'gh release create "$GITHUB_REF_NAME" dist/*.whl dist/*.tar.gz']
     positions = [text.find(step) for step in order]
@@ -258,3 +262,49 @@ def test_release_workflow_publishes_last():
     assert "- name:" not in tail and "- uses:" not in tail, "publishing must be the last step"
     assert "--notes-file release-notes.md --verify-tag" in tail
     assert "GH_TOKEN: ${{ github.token }}" in text
+
+
+def on_master_script() -> str:
+    """The `run:` body of the release workflow's "Check the tag is on master" step."""
+    text = code(WORKFLOWS / "release.yml")
+    step = text[text.index("- name: Check the tag is on master"):]
+    body = step[step.index("run: |") + len("run: |"):].splitlines()[1:]
+    lines = []
+    for line in body:
+        if line.strip().startswith("- name:") or line.strip().startswith("- uses:"):
+            break
+        lines.append(line[10:] if line.startswith(" " * 10) else line.strip())
+    return "\n".join(lines).strip() + "\n"
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or shutil.which("git") is None, reason="needs bash and git")
+def test_release_refuses_a_tag_that_is_not_on_master(tmp_path):
+    """The on-master step, run as the workflow runs it: a commit of master passes, a side-branch commit fails."""
+    origin, clone = tmp_path / "origin", tmp_path / "clone"
+    identity = ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false"]
+
+    def git(cwd, *args):
+        return subprocess.run(["git", *identity, *args], cwd=cwd, check=True, capture_output=True,
+                              text=True).stdout.strip()
+
+    origin.mkdir()
+    git(origin, "init", "-q", "-b", "master")
+    git(origin, "commit", "-q", "--allow-empty", "-m", "on master")
+    on_master = git(origin, "rev-parse", "HEAD")
+    git(origin, "switch", "-q", "-c", "side")
+    git(origin, "commit", "-q", "--allow-empty", "-m", "not reviewed")
+    side = git(origin, "rev-parse", "HEAD")
+    git(origin, "switch", "-q", "master")
+    git(tmp_path, "clone", "-q", str(origin), str(clone))
+    script = tmp_path / "step.sh"
+    script.write_text(on_master_script(), encoding="utf-8", newline="\n")
+
+    def step(sha):
+        env = {**os.environ, "GITHUB_SHA": sha, "GITHUB_REF_NAME": "v0.1.0"}
+        # The full path: on Windows a bare "bash" resolves to the WSL launcher in System32 before PATH.
+        return subprocess.run([shutil.which("bash"), str(script)], cwd=clone, env=env, capture_output=True, text=True)
+
+    assert step(on_master).returncode == 0
+    refused = step(side)
+    assert refused.returncode == 1
+    assert "is not on master" in refused.stdout

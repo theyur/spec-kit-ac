@@ -163,7 +163,8 @@ Optional hooks in `extension.yml` (offered, never auto-run): `after_clarify` →
 - Distributed as a Python CLI `speckit-ac` (mirrors `specify`) from GitHub, pinned to a release tag:
   `uv tool install speckit-ac --from git+https://github.com/theyur/spec-kit-ac@v0.1.0` (no PyPI).
 - **Releases (step 9):** a `vX.Y.Z` tag on `master` triggers `.github/workflows/release.yml`, which
-  checks that the tag, `pyproject.toml` and `extension.yml` carry the same non-dev version, runs the
+  checks that the tagged commit is on `master` and that the tag, `pyproject.toml` and `extension.yml`
+  carry the same final `X.Y.Z` version, runs the
   tests, builds, and creates the GitHub Release with the wheel, the sdist and the `CHANGELOG.md`
   section as notes. A tag is never moved; a failed release is re-run or superseded by the next patch.
   **Version rule:** after a release, the first change on `master` moves it to the next `.dev0`
