@@ -118,6 +118,26 @@ def test_prerequisites_stop_install_before_any_change(project, host, payload, pr
     assert not host.commands("specify extension")
 
 
+@pytest.mark.parametrize("output, problem", [
+    ("warning: a uv notice\n3.14", None),       # warnings before the version line
+    ("Python 3.12", None),                      # a word before the version
+    ("3.14  ", None),                           # trailing spaces
+    ("3.10", "needs >= 3.11"),
+    ("", "does not start Python"),
+    ("3.14\nTraceback: boom", "does not start Python"),  # the version must be on the last line
+    ("3.14.1", "does not start Python"),       # major.minor only
+    ("1" * 20000 + ".", "does not start Python"),  # long digit run without a match: fails fast (S8786)
+])
+def test_python_version_output_shapes(project, host, payload, output, problem):
+    host.python_version = output
+    if problem is None:
+        install(project, host, payload)
+        return
+    with pytest.raises(DeployError, match="before any change") as error:
+        install(project, host, payload)
+    assert problem in str(error.value)
+
+
 def test_timeout_is_a_reported_problem(project, host, payload):
     host.fail["uv run"] = (None, "uv run --no-project timed out after 300 s")
     with pytest.raises(DeployError, match="timed out"):
@@ -252,6 +272,39 @@ def test_patch_skills_makes_real_files(project, host, payload, symlinks):
     assert not (project / SKILL).is_symlink()
     assert (project / SKILL).read_text(encoding="utf-8") == deploy.patch_skill_text(target)
     assert "source: ac:commands/speckit.ac.init.md" in (project / SKILL).read_text(encoding="utf-8")
+
+
+def test_patch_skills_refuses_a_skill_folder_that_leads_outside(project, host, payload, tmp_path):
+    """A speckit-ac skill folder that is a directory link must not make the patch write outside the project."""
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    folder = (project / SKILL).parent
+    outside = tmp_path / "outside" / folder.name
+    shutil.copytree(folder, outside)
+    shutil.rmtree(folder)
+    os.symlink(outside, folder, target_is_directory=True)
+    before = (outside / "SKILL.md").read_bytes()
+    with pytest.raises(DeployError, match="leads outside"):
+        deploy.patch_skills(project)
+    assert (outside / "SKILL.md").read_bytes() == before
+
+
+@pytest.mark.parametrize("linked", [".claude/skills", ".claude"])
+def test_patch_skills_refuses_a_skills_root_that_leads_outside(project, host, payload, tmp_path, linked):
+    """A linked `.claude/skills` (or `.claude`) must not make the patch write outside the project."""
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    inside = project / linked
+    outside = tmp_path / "outside" / Path(linked).name
+    shutil.copytree(inside, outside)
+    shutil.rmtree(inside)
+    os.symlink(outside, inside, target_is_directory=True)
+    skills = outside if linked == ".claude/skills" else outside / "skills"
+    before = {p: p.read_bytes() for p in skills.glob("speckit-ac-*/SKILL.md")}
+    assert before
+    with pytest.raises(DeployError, match=r"\.claude/skills leads outside the project"):
+        deploy.patch_skills(project)
+    assert {p: p.read_bytes() for p in skills.glob("speckit-ac-*/SKILL.md")} == before
 
 
 # ---- settings.json -----------------------------------------------------------------------------------------------

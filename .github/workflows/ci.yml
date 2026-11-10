@@ -1,0 +1,40 @@
+# Tests on Windows, the v1.0 target (DESIGN §2): CPython 3.11 (the floor) and 3.14 (the dev version).
+# The opt-in .NET suites (SPECKIT_AC_DOTNET_E2E=1) and the tests that need spec-kit's `specify` skip here.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.python }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+
+      # setup-uv publishes no major tags (v10 does not exist), so the release is pinned in full.
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Test
+        run: uv run pytest -q --tb=short

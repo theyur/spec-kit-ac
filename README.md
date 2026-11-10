@@ -7,10 +7,10 @@ implementation, reviewed and locked; isolated Claude Code subagents translate th
 implementation), and judge every failing test. Isolation is enforced by a fail-closed guard hook and
 deterministic scripts, not only by instructions.
 
-> **Status: pre-release, under construction.** The CLI and the extension are built and have run end
-> to end with a live model on a sample project (step 7) and are installed in their first real project, Habit
-> Tracker (step 8: install, init, live smoke test). Not yet released. Progress is tracked in
-> [docs/steps/TRACKER.md](docs/steps/TRACKER.md).
+> **Status: v0.1.0 released** ([changelog](CHANGELOG.md)). The CLI and the extension have run end to
+> end with a live model on a sample project and are installed in their first real project, Habit
+> Tracker. v1.0 targets Windows with uv and PowerShell 7 and interactive Claude Code. Progress is
+> tracked in [docs/steps/TRACKER.md](docs/steps/TRACKER.md).
 
 ## Prerequisites (target project)
 
@@ -21,11 +21,22 @@ deterministic scripts, not only by instructions.
 Everything else (AC-surface projects, test framework and runner, Python command, extra spec inputs)
 is detected or asked once by `/speckit-ac-init`.
 
-## Install (pre-release: from a local checkout or the git URL)
+## Install
+
+The latest release:
 
 ```bash
-uv tool install speckit-ac --from git+https://github.com/<owner>/spec-kit-ac
+uv tool install speckit-ac --from git+https://github.com/theyur/spec-kit-ac@v0.1.0
 ```
+
+Or the current `master` (unreleased changes):
+
+```bash
+uv tool install speckit-ac --from git+https://github.com/theyur/spec-kit-ac
+```
+
+To move an installed tool to another version, add `--reinstall` and run `speckit-ac upgrade` in each
+project.
 
 Then, from the root of the spec-kit project (the folder with `.specify/`):
 
@@ -78,6 +89,21 @@ uv sync
 ```bash
 uv run pytest -q --tb=short
 ```
+
+`tools/release_check.py` holds the release checks the release workflow runs (version fields, tag,
+changelog notes).
+
+## PR flow
+
+- Pull requests go against `master`, which is protected: the checks `test (3.11)`, `test (3.14)`
+  (pytest on Windows), `SonarCloud Code Analysis` and `CodeQL` must pass.
+- Copilot reviews are requested by the maintainer.
+- Pull requests from forks get no `SONAR_TOKEN`, so their Sonar job (`Test and analyze`) skips. The
+  required `SonarCloud Code Analysis` check is posted only by SonarQube Cloud after a real analysis, so
+  it never reports and the PR stays blocked; the maintainer reruns it from a branch.
+- Releases: after `master` carries a final version and a dated `CHANGELOG.md` section, a `vX.Y.Z` tag
+  triggers the release workflow, which checks the versions, runs the tests, builds and publishes the
+  GitHub Release. Then `master` moves to the next `.dev0` version.
 
 ## License
 

@@ -187,7 +187,10 @@ def prerequisites(root: Path, host: Host) -> list[str]:
     if host.which("uv") is not None:
         code, out = host.run([*PYTHON.split(), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"], root,
                              timeout=300)
-        match = re.search(r"(\d+)\.(\d+)\s*$", (out or "").strip())
+        # The version is the last word of the last line (uv may print warnings first). An anchored full match
+        # on that one word avoids an unanchored search with backtracking (Sonar S8786).
+        lines = (out or "").strip().splitlines()
+        match = re.fullmatch(r"(\d+)\.(\d+)", lines[-1].rpartition(" ")[2]) if lines else None
         if code != 0 or not match:
             problems.append(f"`{PYTHON}` does not start Python: {tail(out, 200)}")
         elif tuple(int(n) for n in match.groups()) < MIN_PYTHON:
@@ -324,7 +327,18 @@ def patch_skills(root: Path) -> list[str]:
     skills = skill_files(root)
     if not skills:
         raise DeployError(f"spec-kit rendered no {SKILLS}/speckit-ac-*/SKILL.md (is the Claude integration set up?)")
-    for skill in skills:
+    base = (root / SKILLS).resolve()
+    if base != root.resolve() / SKILLS:
+        # `.claude` or `.claude/skills` is itself a link: every write below would land outside the project.
+        raise DeployError(f"{SKILLS} leads outside the project; replace the link with a real folder")
+    for found in skills:
+        # Only SKILL.md itself may be a link (spec-kit's --dev install). A skill folder that leads outside SKILLS
+        # (a directory link or junction) would make the write below land outside the project: refuse it.
+        folder = found.parent.resolve()
+        if folder.parent != base or not folder.name.startswith("speckit-ac-"):
+            raise DeployError(f"{found.parent.relative_to(root).as_posix()} leads outside {SKILLS}; "
+                              "replace it with a real folder")
+        skill = folder / "SKILL.md"
         try:
             data = skill.read_bytes()  # through the link
         except OSError as error:

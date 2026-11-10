@@ -1,0 +1,82 @@
+# SonarQube Cloud analysis with test coverage (the Habit Tracker pattern).
+#
+# Setup (one-time, outside this file):
+#   - Import the repository into SonarQube Cloud (organization theyur), let the first automatic
+#     analysis of master finish, then turn Automatic Analysis OFF (Administration > Analysis Method);
+#     CI analysis fails while it is on.
+#   - Repository secret SONAR_TOKEN: a SonarQube Cloud token with "Execute Analysis" on this project.
+#   - Optional repository variables SONAR_ORGANIZATION / SONAR_PROJECT_KEY if the keys differ from the
+#     defaults in sonar-project.properties.
+#
+# The job skips cleanly while SONAR_TOKEN is not set. Pull requests from forks get no secrets, so they
+# skip too. This job's own check ("Test and analyze") is not the gate: the required "SonarCloud Code
+# Analysis" check is posted only by the SonarQube Cloud app after a real analysis (ruleset integration
+# 12526), so a skipped run leaves it missing and the PR blocked.
+# Coverage comes from `uv run --with coverage`, so pytest stays the only dev dependency (CLAUDE.md).
+
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Test and analyze
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history so Sonar can attribute issues (blame) and detect new code.
+          fetch-depth: 0
+
+      - name: Check prerequisites
+        id: pre
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::notice::SONAR_TOKEN is not set; skipping SonarQube analysis."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      # setup-uv publishes no major tags (v10 does not exist), so the release is pinned in full.
+      - uses: astral-sh/setup-uv@v10.3.3
+        if: steps.pre.outputs.run == 'true'
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Test with coverage
+        if: steps.pre.outputs.run == 'true'
+        # bash -e: a failing command in the middle fails the step (pwsh would only check the last one).
+        shell: bash
+        run: |
+          uv sync --locked
+          uv run --with coverage coverage run -m pytest -q --tb=short
+          uv run --with coverage coverage xml -o coverage.xml
+
+      - name: Analyze
+        if: steps.pre.outputs.run == 'true'
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          # Defaults live in sonar-project.properties; repository variables override them when set.
+          args: >
+            ${{ vars.SONAR_ORGANIZATION && format('-Dsonar.organization={0}', vars.SONAR_ORGANIZATION) || '' }}
+            ${{ vars.SONAR_PROJECT_KEY && format('-Dsonar.projectKey={0}', vars.SONAR_PROJECT_KEY) || '' }}
