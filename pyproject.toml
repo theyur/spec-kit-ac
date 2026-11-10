@@ -1,6 +1,6 @@
 [project]
 name = "speckit-ac"
-version = "0.1.0"
+version = "0.1.1.dev0"
 description = "spec-kit extension and CLI that add an isolated acceptance-test workflow (Reqnroll) to .NET projects"
 readme = "README.md"
 license = "MIT"
