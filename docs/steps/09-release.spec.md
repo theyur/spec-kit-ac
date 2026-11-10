@@ -1,6 +1,6 @@
 # Step 9 — Release v0.1.0
 
-**Status:** approved (2026-11-10) · **Tracker row:** 9 · **Source of truth:** `docs/DESIGN.md`
+**Status:** done (2026-11-10; released as [v0.1.0](https://github.com/theyur/spec-kit-ac/releases/tag/v0.1.0); deviations D1–D5 in the plan) · **Tracker row:** 9 · **Source of truth:** `docs/DESIGN.md`
 
 ## Goal
 
