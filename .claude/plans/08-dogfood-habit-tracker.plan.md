@@ -347,7 +347,7 @@ After round 3 with no BLOCKER, implementation starts (spec-implement rule 7).
 - **Suite and tool:**
   - `oracle.ps1 -Bash "C:\Program Files\Git\bin\bash.exe"` PASSED;
   - suite 676 passed, 9 skipped on 3.14 and 3.11;
-  - tool reinstalled (`tool-build.txt`: HEAD `9804ab8` + the step 1 edits; payload match).
+  - tool reinstalled (`tool-build.txt`: HEAD `88bad5b` + the step 1 edits; payload match).
 - **HT files:** ADR 0003 and `sonar.yml` (2 lines) written.
 - **Install:** `doctor` 10 ok, 1 warn, 0 FAIL; settings keys and hooks kept, guard last; exact path set matched.
 - **Init (user):** 17/17. Surface Application + Domain + Persistence (D3).

@@ -1,6 +1,6 @@
 [project]
 name = "speckit-ac"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "spec-kit extension and CLI that add an isolated acceptance-test workflow (Reqnroll) to .NET projects"
 readme = "README.md"
 license = "MIT"
@@ -20,3 +20,8 @@ dev = ["pytest>=8"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Used by the Sonar workflow only (`uv run --with coverage`); coverage is not a dependency.
+[tool.coverage.run]
+source = ["src", "tools"]
+relative_files = true

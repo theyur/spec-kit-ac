@@ -7,10 +7,12 @@ acceptance-test workflow into **.NET** projects that already use spec-kit.
 
 - `docs/DESIGN.md`: every agreed decision. If a request or a plan conflicts with it, stop and ask.
 - `docs/steps/TRACKER.md`: implementation steps and their status. Follow its per-step process.
-- `docs/reference/WORKFLOW-SETUP-CT.md`: the original method (§0–9 generic, §10 CT-only — never copy
-  CT specifics).
-- Port from `<original project>\.claude\` (read only; never edit that repo) and
+- `docs/reference/WORKFLOW-SETUP-CT.md`: the original method (§0–9 generic; §10, the original project's own
+  choices, is not part of this copy — never copy that project's specifics).
+- Port from the original project's `.claude\` folder (read only; never edit that repo) and
   `~\.claude\skills\speckit-critic\SKILL.md`.
+- Docs use placeholders (`<original project>`, `<habit-tracker>`, `<e2e-sample>`, `~`, …) instead of local
+  absolute paths; `CLAUDE.local.md` (git-ignored) maps them on this machine. Never commit a local absolute path.
 
 ## Working rules
 

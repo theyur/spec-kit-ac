@@ -12,7 +12,7 @@ subagent transcripts (`~/.claude/projects/E--Personal-agentic-engineering-course
 - **Tools:** Windows 11, Claude Code 2.1.319 (desktop app), spec-kit 1.0.2, .NET SDK 10.0.403, uv 0.11.26,
   PowerShell 7.6.9.
 - **Model:** every session and subagent ran on `claude-fable-5-1`.
-- **speckit-ac 0.1.0.dev0:** installed as a uv tool from the checkout. The build was HEAD `9804ab8` plus the
+- **speckit-ac 0.1.0.dev0:** installed as a uv tool from the checkout. The build was HEAD `88bad5b` plus the
   uncommitted step 8 edits (the five commands and `tests/test_commands.py`; plan D2). Both the tool's payload and HT's
   `.specify/extensions/ac/` matched the checkout (CRLF folded). Every CLI call ran by the tool's full path.
 - **Habit Tracker:**
@@ -206,7 +206,7 @@ missed before, all in code unchanged since the first review. The user chose to f
 - **`new_run.py` / `new_analyze.py` overwrite an existing marker: by design.** WORKFLOW §3.9 makes the next run
   script the recovery path for an interrupted run. Refusing would change the step 4 marker design. That is
   deferred to a decision with the user, and it matters more now that subagents run in the background.
-  **Decided by the user:** option B (refuse). Committed in spec-kit-ac `a8986a9` and deployed to HT `5203f29`.
+  **Decided by the user:** option B (refuse). Committed in spec-kit-ac `65e3454` and deployed to HT `5203f29`.
 
 ## After the third review: two gaps found by HT's `/process-pr-feedback`
 

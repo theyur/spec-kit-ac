@@ -24,7 +24,7 @@ not only by instructions.
 The original design and a working implementation exist for one project (CT):
 
 - `docs/reference/WORKFLOW-SETUP-CT.md`: the original setup document. Sections 0–9 are the generic
-  method; section 10 is CT-specific and must **not** be copied.
+  method; section 10 (CT's own choices) is not part of this copy, and CT specifics must **not** be copied.
 - `<original project>\.claude\` (read-only source to port from): `hooks/guard.py`, `hooks/test_guard.py`,
   `scripts/*.py` (10 scripts), `agents/ac-*.md` (3), `skills/ac-*/SKILL.md` (3). About 1,400 lines,
   mostly config-driven already.
@@ -160,8 +160,19 @@ Optional hooks in `extension.yml` (offered, never auto-run): `after_clarify` →
   2. The **guard** blocks (exit 2) a main-agent `Skill` call whose `tool_input.skill` starts with
      `speckit-ac-`, so the rule holds even when the patch was reverted. Users still run the skills by
      typing `/speckit-ac-…`.
-- Distributed as a Python CLI `speckit-ac` (mirrors `specify`):
-  `uv tool install speckit-ac --from git+https://github.com/<owner>/spec-kit-ac`.
+- Distributed as a Python CLI `speckit-ac` (mirrors `specify`) from GitHub, pinned to a release tag:
+  `uv tool install speckit-ac --from git+https://github.com/theyur/spec-kit-ac@v0.1.0` (no PyPI).
+- **Releases (step 9):** a `vX.Y.Z` tag on `master` triggers `.github/workflows/release.yml`, which
+  checks that the tag, `pyproject.toml` and `extension.yml` carry the same non-dev version, runs the
+  tests, builds, and creates the GitHub Release with the wheel, the sdist and the `CHANGELOG.md`
+  section as notes. A tag is never moved; a failed release is re-run or superseded by the next patch.
+  **Version rule:** after a release, the first change on `master` moves it to the next `.dev0`
+  version and opens an `## [Unreleased]` changelog section; the README pins the newest released
+  (dated) changelog version, never a dev version.
+- **PR gates** (as in Habit Tracker): PRs against `master`; required checks `test (3.11)`,
+  `test (3.14)` (pytest on `windows-latest`), `SonarCloud Code Analysis` (CI scanner with coverage,
+  `SONAR_TOKEN`) and `CodeQL` (default setup); ruleset `master protect` blocks deletion and
+  non-fast-forward pushes. The user requests Copilot reviews and merges.
   - `install`: prerequisite checks → `specify extension add --dev <bundled payload>` → deploy.
   - `uninstall`: undo deploy (keep user-modified files, warn) → `specify extension remove ac`.
   - `upgrade`: re-add with `--force` + redeploy. `doctor`: hashes, guard registration, Python command.
@@ -223,3 +234,4 @@ allows `SubagentHandback`, §9).
 | 2026-11-08 | Step 5 spec: `/speckit-ac-init` = command + deterministic scripts (`init_detect`, `init_config`, `init_scaffold`, `init_verify`, `smoke_test`), one summary confirmation before any write; init (not deploy) writes the `.gitignore` / `.gitattributes` managed blocks (§9); LF pinned for every locked text file, samples `binary`; ref mode references `<refsDir>/*.dll` by one glob; packages from a fixed framework × runner recipe plus the surface's public packages (central pins, then the surface's, then the unit tests' versions, then latest stable); verification never writes into product projects; re-running init with a config only verifies; the smoke test writes its own marker (`/speckit-ac-init smoke`); only verified pairs are supported (7 of 8: xUnit v2 has no Microsoft.Testing.Platform runner); `.workflow/active-run.json` is git-ignored. |
 | 2026-11-09 | Step 8 (user, after the Habit Tracker PR review): `new_run.py` / `new_analyze.py` **refuse** while another run's active-run marker exists instead of overwriting it (option B). Subagents run in the background, so re-pinning a still-working subagent to another run would break it silently. The user ends an interrupted run with the new `changed_files.py clear` (`smoke_test.py end` for a smoke marker); `/speckit-ac-tests-analyze` runs `clear` itself at every stop before the judge. Config validation tightened on every load (guard and scripts): spec inputs, `refsDir` and the AC project may not overlap implementation or protected folders, every path is project-relative, `acRefBuildCommand` is exactly the generated command (WORKFLOW §3.9, CONFIG.md) |
 | 2026-11-09 | Step 8 (Copilot sixth review on the Habit Tracker PR, user chose the fixes): an `acceptance.md` item without a scenario fails `check_features.py` unless it is in the latest translation report's Issues table, and `ac_lock.py lock features` refuses until it is in that run's `skipped.json`. The scaffold writes `xunit.runner.json` (`parallelizeTestCollections: false`) for xUnit v2/v3: scenarios usually share one test environment, and xUnit is the only supported framework that runs collections in parallel by default. |
+| 2026-11-10 | Step 9 (user): history rewritten before the first push (§10 of the reference doc and every local absolute path replaced by placeholders, `CLAUDE.local.md` maps them); public repo `theyur/spec-kit-ac`; PR gates as in Habit Tracker (pytest on Windows 3.11/3.14, SonarQube Cloud, CodeQL default setup, ruleset `master protect`); releases built by a tag-triggered workflow; version rule `.dev0` after a release, README pinned to the newest released tag (§9). |
