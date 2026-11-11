@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: ac
   name: "Acceptance tests (AC)"
-  version: "0.1.1.dev0"
+  version: "0.1.1"
   description: "Isolated acceptance-test workflow for .NET: reviewed and locked acceptance criteria, translated to Reqnroll features and bound to step definitions by subagents that never see the implementation."
   author: "spec-kit-ac"
   license: MIT

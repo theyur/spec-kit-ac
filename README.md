@@ -7,7 +7,7 @@ implementation, reviewed and locked; isolated Claude Code subagents translate th
 implementation), and judge every failing test. Isolation is enforced by a fail-closed guard hook and
 deterministic scripts, not only by instructions.
 
-> **Status: v0.1.0 released** ([changelog](CHANGELOG.md)). The CLI and the extension have run end to
+> **Status: v0.1.1 released** ([changelog](CHANGELOG.md)). The CLI and the extension have run end to
 > end with a live model on a sample project and are installed in their first real project, Habit
 > Tracker. v1.0 targets Windows with uv and PowerShell 7 and interactive Claude Code. Progress is
 > tracked in [docs/steps/TRACKER.md](docs/steps/TRACKER.md).
@@ -26,7 +26,7 @@ is detected or asked once by `/speckit-ac-init`.
 The latest release:
 
 ```bash
-uv tool install speckit-ac --from git+https://github.com/theyur/spec-kit-ac@v0.1.0
+uv tool install speckit-ac --from git+https://github.com/theyur/spec-kit-ac@v0.1.1
 ```
 
 Or the current `master` (unreleased changes):
