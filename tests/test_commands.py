@@ -299,6 +299,27 @@ def test_critic_rules():
         assert hard_rules in source.read_text(encoding="utf-8")
 
 
+def test_critic_reports_each_pass_to_the_user():
+    """HT slice 1: the user saw only "REVISE with 5 MAJOR and 12 MINOR"; every pass and the finish list each note."""
+    raw = text("critic")
+    loop = flat(raw.split("\n## Loop", 1)[1].split("\n## Stage features", 1)[0])
+    summary = loop.index("**show the user the pass summary** in its own message, before any other tool call")
+    assert summary < loop.index("verify before you revise") < loop.index("**Cap reached.**")
+    assert "Write it out in full on every pass, also when you are about to revise" in loop
+    template = raw.split("pass summary** in its own message", 1)[1].split("```text\n", 1)[1].split("```", 1)[0]
+    assert [line.strip() for line in template.strip().splitlines()] == [
+        "Critic pass {n} ({stage}): {verdict}, {a} MAJOR, {b} MINOR — {report_path}", "MAJOR",
+        "- MAJOR-1 <title>: <one line: what is wrong and what it breaks>", "MINOR", "- MINOR-1 <title>: <one line>"]
+    assert "First show its pass summary (step 2) and verify its findings" in loop
+    assert "each with your result (confirmed, partly or rejected, and why)" in loop
+    features = flat(raw.split("\n## Stage features", 1)[1].split("\n## Finish", 1)[0])
+    assert "show the user the pass summary, in the format of step 2 of the loop" in features
+    finish = flat(raw.split("\n## Finish\n", 1)[1].split("\n## Critic prompt template", 1)[0])
+    assert "write it out in full even when the pass summaries were shown earlier" in finish
+    assert ("each MAJOR and MINOR note in one line with its outcome: fixed, partly fixed, rejected (with the reason) "
+            "or open") in finish
+
+
 # ---- walks: each subagent command's script steps in order, the launch through the real guard ------------------
 
 @pytest.fixture

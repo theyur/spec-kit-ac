@@ -7,7 +7,12 @@ version and an `## [Unreleased]` section until the next release.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- `/speckit-ac-critic` shows a pass summary after every pass, before it verifies anything: the verdict,
+  the counts, and one line per MAJOR and MINOR note. Its finish report lists every note with its
+  outcome (fixed, partly fixed, rejected with the reason, or open). Before, the user often saw only the
+  verdict and the counts.
 
 ## [0.1.0] - 2026-11-10
 
