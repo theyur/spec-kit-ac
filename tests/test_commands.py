@@ -237,6 +237,12 @@ def test_tests_write_rules():
     assert "Never run the tests of the whole solution" in content
     assert "cross-feature changes, missing packages" in content
     assert '`dotnet build "<solution>" -nologo -v q`' in content  # quoted: a solution name may contain spaces
+    # HT slice 1: missing packages name the next step; the main agent never adds them
+    assert ('(`dotnet add "<acProject>" package <id>`, `acProject` from the config; it goes into the shared '
+            "ItemGroup, so both modes get it), then run `/speckit-ac-tests-write` again without `fresh`") in content
+    assert "Never add them yourself." in content
+    assert ("The next step is `/speckit-ac-tests-analyze`, unless step 8 named missing packages: then it is this "
+            "command again, without `fresh`.") in content
 
 
 def test_tests_analyze_rules():

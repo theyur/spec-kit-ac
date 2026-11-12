@@ -221,7 +221,9 @@ a matching marker is denied every call.
   `Samples/F00N/`, `StepDefinitions/F00N/`, `Support/F00N/`, `Support/Shared/`.
 - Reference assemblies and API listings (`<refsDir>`, default `artifacts/refs/`, git-ignored) are
   one folder for all features: the API belongs to the solution. A script regenerates them at the
-  start of translate and tests-write.
+  start of translate and tests-write. Before that, it checks that the AC project still references every public
+  package of the surface projects; ref mode has no other way to get them. It fails with the `dotnet add` lines
+  for any that are missing.
 - Per-feature records: `specs/NNN-x/acceptance.md`, `specs/NNN-x/ac/{sources.lock,features.lock}`,
   `specs/NNN-x/ac/runs/{translate-NNN,run-NNN/analyze-K}/`.
 - Tags: a feature tag `@F00N` (added by the translator, enforced by a check script) plus `@AC-NNN`,

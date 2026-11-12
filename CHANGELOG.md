@@ -7,7 +7,28 @@ version and an `## [Unreleased]` section until the next release.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- `export_refs.py` no longer reports return-value attributes such as `[return: NotNullIfNotNull("name")]` as
+  logic in a reference-assembly listing. Any nullability contract on a return value used to fail the export.
+- `export_refs.py` ignores keywords inside string and char literals and comments, for example a public
+  `const string` that contains "return".
+
+### Changed
+
+- `export_refs.py` (the start of `/speckit-ac-translate` phase 2 and `/speckit-ac-tests-write`) first checks
+  that the AC project still references every package of the AC surface projects that is not implicit or
+  `PrivateAssets=all`.
+  - `/speckit-ac-init` adds these packages once. A package the surface gains later was missing in ref mode,
+    which compiles against the reference assemblies only, so the writer's build failed (for example
+    `ServiceCollection` not found).
+  - The check fails before anything is built and prints the `dotnet add` line for each missing package. It
+    never edits the AC project.
+- `/speckit-ac-tests-write`: when the writer reports missing packages, the command names the next step: add
+  them to the AC project, then run the command again without `fresh`.
+
+**Upgrading:** a project whose AC surface gained packages after `/speckit-ac-init` now stops at
+`export_refs.py` until the listed packages are added to the AC project.
 
 ## [0.1.1] - 2026-11-11
 

@@ -702,10 +702,166 @@ def test_public_only(export_refs):
     assert not [line for line in out.splitlines() if export_refs.NON_PUBLIC.match(line)]
 
 
-def test_logic_detection(export_refs):
-    assert export_refs.LOGIC.search("\t\t\treturn x;")
-    assert export_refs.LOGIC.search("if (a)")
-    assert not export_refs.LOGIC.search("\t\t\tthrow null;")
+# HT slice 1: `[return: NotNullIfNotNull(...)]` on an internal type failed the export; keywords inside string
+# literals and comments are not statements either.
+LOGIC_MATCH = ["return x;", "\treturn;", "return cond ? a : b;", "if (x) throw null;", "foreach (var i in xs)",
+               "await Task.Delay(1);", "switch (x)", "try", 'return "a"; // x', 'x = @"""a"" b"; return y;',
+               "\t\t\treturn x;", "if (a)", 'string s = $"{a}"; while (b)', 'string r = """x"""; if (y)']
+LOGIC_CLEAN = ['[return: NotNullIfNotNull("name")]', "\t[return: MaybeNull]", "[return : NotNull]",
+               "public string? NormalizeName(string? name)", "throw null;", "\t\t\tthrow null;",
+               'public const string Hint = "return the habit";', 'public const string P = @"if (a) ""b""";',
+               "public const char C = '\"'; // return", "/* while (x) */ public int X;",
+               'public const string E = "say \\"return\\" now";', 'public const string R = """if (x) "y" """;',
+               'public const string I = $@"try {x}";']
+
+
+@pytest.mark.parametrize("line", LOGIC_MATCH)
+def test_logic_lines_match(export_refs, line):
+    assert export_refs.logic_lines(f"namespace A\n{{\n{line}\n}}\n") == [line.strip()]
+
+
+@pytest.mark.parametrize("line", LOGIC_CLEAN)
+def test_logic_lines_clean(export_refs, line):
+    assert export_refs.logic_lines(f"namespace A\n{{\n{line}\n}}\n") == []
+
+
+def test_logic_lines_quote_the_original_line(export_refs):
+    assert export_refs.logic_lines('\t\treturn "a"; // x\n') == ['return "a"; // x']
+
+
+@pytest.mark.parametrize("line, code", [
+    ('a = "x\\"y"; b', 'a = ""; b'),                # escaped quote
+    ('a = @"x""y"; b', 'a = ""; b'),                # verbatim "" escape
+    ('a = @"""x"" y"; b', 'a = ""; b'),             # verbatim that starts with an escaped quote, not a raw string
+    ('a = "http://x"; b', 'a = ""; b'),             # // inside a string is string content
+    ("c = '\\''; d", "c = ''; d"),                  # escaped char literal
+    ('a = """x "q" y"""; b', 'a = ""; b'),          # raw string
+    ('a = "unterminated return', 'a = ""'),         # an unterminated literal hides the rest of its line only
+    ("x; // return", "x; "),
+    ("/* if (a) */ x", "  x"),
+])
+def test_code_only(export_refs, line, code):
+    assert export_refs.code_only(line) == code
+
+
+def pkg(pid, version=None, private="", implicit=False):
+    return {"id": pid, "version": version, "privateAssets": private, "implicit": implicit}
+
+
+def test_missing_packages(export_refs):
+    missing = export_refs.missing_packages
+    a = [pkg("Ef.Core", "10.0.15"), pkg("Di.Abstractions", "10.0.1")]
+    assert missing([a], ["ef.core", "DI.ABSTRACTIONS"], False) == []                       # none missing, any case
+    assert missing([a], ["Ef.Core"], False) == [("Di.Abstractions", "10.0.1")]             # with its version
+    assert missing([[pkg("Sdk.Thing", "1.0", implicit=True), pkg("Ef.Design", "1.0", private="All ")]], [],
+                   False) == []                                                            # implicit, PrivateAssets=all
+    b = [pkg("di.abstractions", "10.0.15"), pkg("Other")]
+    assert missing([a, b], ["Ef.Core"], False) == [("Di.Abstractions", "10.0.15"), ("Other", None)]  # highest, once
+    assert missing([a, b], [], True) == [("Ef.Core", None), ("Di.Abstractions", None), ("Other", None)]  # CPM
+
+
+REF_LISTING = """namespace App.Core
+{
+\tpublic class Api
+\t{
+\t\tpublic const string Hint = "return the habit";
+\t\t[return: NotNull]
+\t\tpublic string? Name(string? x)
+\t\t{
+\t\t\tthrow null;
+\t\t}
+\t}
+}
+"""
+
+
+def fake_export_dotnet(export_refs, project, monkeypatch, surface=(), pins=(), cpm="", ac=(), listing=REF_LISTING):
+    """export_refs.main() in `project` with every dotnet call answered here; returns the recorded calls."""
+    monkeypatch.setattr(export_refs, "ROOT", None)
+    monkeypatch.setattr(export_refs.aclib, "root", lambda _: project)
+    monkeypatch.chdir(project)
+    ref = project / "obj/Debug/ref/App.Core.dll"
+    write(ref, "ReferenceAssemblyAttribute")
+    calls = []
+
+    def run(*args):
+        calls.append(args)
+        queries = args[4:]
+        if args[1] == "msbuild" and "-getItem:PackageVersion" in queries:
+            return json.dumps({"Properties": {"ManagePackageVersionsCentrally": cpm},
+                               "Items": {"PackageReference": list(surface), "PackageVersion": list(pins)}})
+        if args[1] == "msbuild" and "-p:AcRefMode=true" in queries:
+            return json.dumps({"Items": {"PackageReference": [{"Identity": i} for i in ac]}})
+        if args[1] == "msbuild" and "-getItem:ProjectReference" in queries:
+            return json.dumps({"Items": {"ProjectReference": []}})
+        if args[1] == "msbuild" and "-getProperty:TargetRefPath" in queries:
+            return json.dumps({"Properties": {"TargetRefPath": str(ref), "AssemblyName": "App.Core"}})
+        if args[1] == "build":
+            return ""
+        if args[1:4] == ("tool", "run", "ilspycmd"):
+            return listing
+        raise AssertionError(f"unexpected dotnet call: {args}")
+    monkeypatch.setattr(export_refs, "run", run)
+    return calls
+
+
+SURFACE_ITEMS = [{"Identity": "Microsoft.EntityFrameworkCore.SqlServer", "Version": "10.0.15"},
+                 {"Identity": "Microsoft.Extensions.DependencyInjection.Abstractions", "Version": "10.0.15"},
+                 {"Identity": "Microsoft.NET.ILLink.Tasks", "Version": "10.0.0", "IsImplicitlyDefined": "true"},
+                 {"Identity": "Microsoft.EntityFrameworkCore.Design", "Version": "10.0.15", "PrivateAssets": "all"}]
+
+
+def test_check_packages_stops_before_any_build_or_delete(export_refs, project, monkeypatch):
+    """HT slice 1: the surface gained packages after /speckit-ac-init; ref mode lacked them."""
+    keep = project / "artifacts/refs/keep.dll"
+    write(keep, "x")
+    calls = fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS,
+                               ac=["microsoft.entityframeworkcore.sqlserver", "Reqnroll.xUnit"])
+    with pytest.raises(SystemExit) as error:
+        export_refs.main()
+    message = str(error.value.code)
+    assert message.startswith("FAIL: the AC project lacks packages") and message.isascii()
+    ac = CONFIG["acProject"]
+    assert (f'  dotnet add "{ac}" package Microsoft.Extensions.DependencyInjection.Abstractions --version 10.0.15'
+            in message.splitlines())
+    assert "SqlServer" not in message and "ILLink" not in message and ".Design" not in message
+    assert "then run the command again" in message
+    assert not [c for c in calls if c[1] == "build"] and keep.is_file()
+    ac_calls = [c for c in calls if c[2] == ac]
+    assert len(ac_calls) == 1 and "-p:AcRefMode=true" in ac_calls[0]
+
+
+@pytest.mark.parametrize("variant", ["props file", "property"])
+def test_check_packages_cpm_gives_no_version(export_refs, project, monkeypatch, variant):
+    if variant == "props file":
+        write(project / "Directory.Packages.props", "<Project />")
+        kwargs = {"surface": [{"Identity": "Lib.A", "Version": "1.2.3"}]}
+    else:
+        kwargs = {"surface": [{"Identity": "Lib.A"}], "pins": [{"Identity": "Lib.A", "Version": "1.2.3"}],
+                  "cpm": "true"}
+    fake_export_dotnet(export_refs, project, monkeypatch, **kwargs)
+    with pytest.raises(SystemExit) as error:
+        export_refs.main()
+    assert f'  dotnet add "{CONFIG["acProject"]}" package Lib.A' in str(error.value.code).splitlines()
+
+
+def test_main_runs_to_the_end_without_drift(export_refs, project, monkeypatch):
+    calls = fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS,
+                               ac=["Microsoft.EntityFrameworkCore.SqlServer",
+                                   "Microsoft.Extensions.DependencyInjection.Abstractions"])
+    export_refs.main()
+    api = project / "artifacts/refs/api/App.Core.cs"
+    assert [c for c in calls if c[1] == "build"] and api.is_file()
+    assert '[return: NotNull]' in api.read_text(encoding="utf-8")
+
+    fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS,
+                       ac=["Microsoft.EntityFrameworkCore.SqlServer",
+                           "Microsoft.Extensions.DependencyInjection.Abstractions"],
+                       listing=REF_LISTING.replace("\t\t\tthrow null;", '\t\t\treturn "x"; // y'))
+    with pytest.raises(SystemExit) as error:
+        export_refs.main()
+    assert "listing contains logic" in str(error.value.code)
+    assert '  return "x"; // y' in str(error.value.code).splitlines()
 
 
 def test_internals_visible_to_found_in_folders_named_like_build_output(export_refs, tmp_path, monkeypatch):
