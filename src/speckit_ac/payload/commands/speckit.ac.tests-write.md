@@ -70,9 +70,14 @@ Follow the steps exactly. Stop at the first failure and report it.
 7. Start the test writer (Rules, steps 1–5).
 8. Read `writer-report.md` in the run folder. Report to the user: run id, build status, the created
    and changed file **names** (from the check in step 7), scenarios bound, unexpressible steps,
-   interpretations and assumptions, cross-feature changes, missing packages.
+   interpretations and assumptions, cross-feature changes, missing packages. If the report lists
+   missing packages: tell the user to add each one to the AC project
+   (`dotnet add "<acProject>" package <id>`, `acProject` from the config; it goes into the shared
+   ItemGroup, so both modes get it), then run `/speckit-ac-tests-write` again without `fresh`, so the
+   bound step definitions are kept. Never add them yourself.
 
 ## Report and stop
 
-Stop after step 8 (or at the first failure). The next step is `/speckit-ac-tests-analyze`. Never
+Stop after step 8 (or at the first failure). The next step is `/speckit-ac-tests-analyze`, unless
+step 8 named missing packages: then it is this command again, without `fresh`. Never
 start it, or any other command, yourself.

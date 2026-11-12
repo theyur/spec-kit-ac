@@ -37,14 +37,8 @@ WATCHED = ("Directory.Packages.props", "dotnet-tools.json", ".config/dotnet-tool
            ".gitattributes")
 
 
-def version_key(version: str):
-    parts = re.split(r"[.-]", version)
-    return [(0, int(p), "") if p.isdigit() else (1, 0, p) for p in parts]
-
-
-def highest(versions):
-    versions = sorted({v for v in versions if v}, key=version_key)
-    return versions[-1] if versions else None
+version_key = init_detect.version_key
+highest = init_detect.highest
 
 
 def packages(framework: str, runner: str, surface: list[dict], unit_tests: list[dict], cpm: bool):
@@ -52,9 +46,7 @@ def packages(framework: str, runner: str, surface: list[dict], unit_tests: list[
     rec = init_config.recipe(framework, runner)
     wanted = [*rec["packages"], init_config.ADAPTER[framework], TIME_PROVIDER]
     for project in surface:
-        for p in project["packages"]:
-            if not p["implicit"] and p["privateAssets"].strip().lower() != "all":
-                wanted.append(p["id"])
+        wanted += [p["id"] for p in project["packages"] if init_detect.public_package(p)]
     seen, out, notes = set(), [], []
     for pid in wanted:
         if pid.lower() in seen:

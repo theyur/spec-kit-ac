@@ -134,9 +134,10 @@ def _true(value) -> bool:
     return isinstance(value, str) and value.strip().lower() == "true"
 
 
-def describe(root: Path, project: str, evaluation: dict) -> dict:
-    """One project's facts from its msbuild evaluation."""
-    props, items = evaluation.get("Properties", {}), evaluation.get("Items", {})
+def package_refs(evaluation: dict) -> list[dict]:
+    """[{id, version, privateAssets, implicit}] of a project's PackageReference items (msbuild evaluation with
+    -getItem:PackageReference and -getItem:PackageVersion). Version: VersionOverride, Version, the central pin."""
+    items = evaluation.get("Items", {})
     pins = {i["Identity"].lower(): i.get("Version") for i in items.get("PackageVersion", [])}
     packages = []
     for item in items.get("PackageReference", []):
@@ -144,6 +145,29 @@ def describe(root: Path, project: str, evaluation: dict) -> dict:
         version = item.get("VersionOverride") or item.get("Version") or pins.get(pid.lower()) or None
         packages.append({"id": pid, "version": version, "privateAssets": item.get("PrivateAssets", ""),
                          "implicit": _true(item.get("IsImplicitlyDefined"))})
+    return packages
+
+
+def public_package(package: dict) -> bool:
+    """A package whose public types a consumer compiles against: not implicit (SDK) and not PrivateAssets=all.
+    /speckit-ac-init adds these to the AC project; export_refs.py checks that they are still there."""
+    return not package["implicit"] and package["privateAssets"].strip().lower() != "all"
+
+
+def version_key(version: str):
+    parts = re.split(r"[.-]", version)
+    return [(0, int(p), "") if p.isdigit() else (1, 0, p) for p in parts]
+
+
+def highest(versions):
+    versions = sorted({v for v in versions if v}, key=version_key)
+    return versions[-1] if versions else None
+
+
+def describe(root: Path, project: str, evaluation: dict) -> dict:
+    """One project's facts from its msbuild evaluation."""
+    props, items = evaluation.get("Properties", {}), evaluation.get("Items", {})
+    packages = package_refs(evaluation)
     frameworks = framework_of(p["id"] for p in packages)
     tfms = [t for t in (props.get("TargetFrameworks") or props.get("TargetFramework") or "").split(";") if t.strip()]
     return {

@@ -4,6 +4,14 @@ Copies only reference assemblies (never real dlls, pdbs or XML docs) of each con
 its project-to-project dependencies into config.refsDir, writes <refsDir>/api/<Assembly>.cs with ilspycmd, and
 fails loudly if anything could leak implementation.
 
+Two checks guard it:
+- Packages, before anything is built or deleted: every package of the surface projects that is not implicit or
+  PrivateAssets=all must also be referenced by the AC project in ref mode. Ref mode compiles against the reference
+  assemblies only, which carry no package graph, so a package the surface gained after /speckit-ac-init would be
+  missing there. The FAIL message lists the `dotnet add` lines that fix it; nothing is added automatically.
+- Logic: no listing line may hold a statement outside string literals and comments; a reference assembly has only
+  `throw null` bodies.
+
 Reference assemblies drop method bodies and private members but keep every type, internal and private nested ones
 included, with their non-private members. Those name the implementation's structure, so the listing keeps public
 (and protected nested) types only.
@@ -17,18 +25,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import aclib  # noqa: E402
+import init_detect  # noqa: E402
 
 ROOT = None  # the project root, set by main() (not at import, so the pure functions can be imported by tests)
 CONFIGURATION = "Debug"
 # Build output folders only (bin, obj, obj-ref, bin_x, …); not source folders such as Bindings/ or objectives/.
 BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)
-# Statements that can't appear in a reference-assembly listing, where every body is `throw null`.
-LOGIC = re.compile(r"\breturn\b|\bif\s*\(|\bfor(each)?\s*\(|\bwhile\s*\(|\bswitch\b|\bawait\b|\btry\b")
+# Statements that can't appear in a reference-assembly listing, where every body is `throw null`. `return` followed
+# by `:` is the attribute target of `[return: NotNullIfNotNull(...)]`, not a statement. Scanned on code_only(line).
+LOGIC = re.compile(r"\breturn\b(?!\s*:)|\bif\s*\(|\bfor(each)?\s*\(|\bwhile\s*\(|\bswitch\b|\bawait\b|\btry\b")
 # A type declaration as ilspycmd writes it: tab indentation, modifiers, keyword. Body braces are on their own lines.
 TYPE_DECL = re.compile(r"^(?P<indent>\t*)(?P<mods>(?:(?:public|internal|private|protected|sealed|abstract|static|"
                        r"readonly|partial|file|unsafe|ref|new)\s+)*)(?:class|struct|interface|enum|record|delegate)\s")
 NON_PUBLIC = re.compile(r"^\s*(?:internal|private|file)\b")
 NAMESPACE = re.compile(r"^namespace (?P<name>[\w.]+)$")
+# The start of a string literal: an optional $ / @ prefix (interpolated, verbatim) and the run of quotes after it
+# (3 or more open a raw string; 1, or 2 for an empty string, open a regular one).
+STRING_START = re.compile(r'([$@]*)("+)')
 
 
 def run(*args):
@@ -63,6 +76,95 @@ def check_no_internals_visible_to(project):
             if "InternalsVisibleTo" in f.read_text(encoding="utf-8", errors="replace")]
     if hits:
         sys.exit("FAIL: InternalsVisibleTo puts internal members into the reference assembly:\n  " + "\n  ".join(hits))
+
+
+def code_only(line):
+    """The line with string and char literals emptied and comments removed, so keywords inside them don't count.
+    One line at a time: an unterminated literal or comment hides the rest of its line only."""
+    out, i, n = [], 0, len(line)
+    while i < n:
+        if line.startswith("//", i):
+            break
+        if line.startswith("/*", i):
+            end = line.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+            out.append(" ")
+            continue
+        c = line[i]
+        if c == "'":
+            j = i + 1
+            while j < n and line[j] != "'":
+                j += 2 if line[j] == "\\" else 1
+            out.append("''")
+            i = j + 1
+            continue
+        start = STRING_START.match(line, i) if c in '$@"' else None
+        if not start:
+            out.append(c)
+            i += 1
+            continue
+        prefix, quotes = start.group(1), start.group(2)
+        if "@" in prefix:  # verbatim, whatever the quote count: @"""a"" b" starts with an escaped quote
+            j = i + len(prefix) + 1
+            while j < n:
+                if line[j] == '"':
+                    if line.startswith('""', j):
+                        j += 2
+                        continue
+                    break
+                j += 1
+            i = j + 1
+        elif len(quotes) >= 3:  # raw string: ends at the same run of quotes
+            end = line.find(quotes, start.end())
+            i = n if end < 0 else end + len(quotes)
+        else:
+            j = i + len(prefix) + 1
+            while j < n and line[j] != '"':
+                j += 2 if line[j] == "\\" else 1
+            i = j + 1
+        out.append('""')
+    return "".join(out)
+
+
+def logic_lines(listing):
+    """The listing lines (stripped, otherwise as written) that hold a statement outside literals and comments."""
+    return [line.strip() for line in listing.splitlines() if LOGIC.search(code_only(line))]
+
+
+def missing_packages(surface, ac, cpm):
+    """[(id, version or None)] of the public packages of the surface projects (package_refs lists) that the AC
+    project (its package ids) lacks; first-seen order, case-insensitive. Version: the surface's (the highest when
+    projects disagree), None under central package management or when the surface has none."""
+    present = {pid.lower() for pid in ac}
+    wanted, seen = [], set()
+    for packages in surface:
+        for p in packages:
+            key = p["id"].lower()
+            if init_detect.public_package(p) and key not in present and key not in seen:
+                seen.add(key)
+                wanted.append(p["id"])
+    if cpm:
+        return [(pid, None) for pid in wanted]
+    return [(pid, init_detect.highest(p["version"] for packages in surface for p in packages
+                                      if p["id"].lower() == pid.lower())) for pid in wanted]
+
+
+def check_packages(cfg):
+    """Fail before anything is built or deleted when the AC project lacks a public package of the surface."""
+    evaluations = [msbuild_json(p, "-getItem:PackageReference", "-getItem:PackageVersion",
+                                "-getProperty:ManagePackageVersionsCentrally") for p in cfg["acSurfaceProjects"]]
+    cpm = (any(init_detect._true(e.get("Properties", {}).get("ManagePackageVersionsCentrally")) for e in evaluations)
+           or (ROOT / "Directory.Packages.props").is_file())
+    ac_items = msbuild_json(cfg["acProject"], "-p:AcRefMode=true", "-getItem:PackageReference")
+    ac = [i["Identity"] for i in ac_items.get("Items", {}).get("PackageReference", [])]
+    missing = missing_packages([init_detect.package_refs(e) for e in evaluations], ac, cpm)
+    if missing:
+        lines = [f'dotnet add "{cfg["acProject"]}" package {pid}' + (f" --version {version}" if version else "")
+                 for pid, version in missing]
+        sys.exit("FAIL: the AC project lacks packages that the AC surface references (ref mode compiles only against "
+                 "the\nreference assemblies, so their types are missing there):\n  " + "\n  ".join(lines) +
+                 "\nAdd them to the AC project (they go into the shared ItemGroup, so both modes get them), then run "
+                 "the command again.")
 
 
 def visible(mods):
@@ -104,6 +206,7 @@ def main():
     global ROOT
     ROOT = aclib.root(__file__)
     cfg = aclib.load_config(ROOT)
+    check_packages(cfg)
     refs = ROOT / cfg["refsDir"]
     shutil.rmtree(refs, ignore_errors=True)
     (refs / "api").mkdir(parents=True)
@@ -126,7 +229,7 @@ def main():
 
     for dll in exported:
         listing = run("dotnet", "tool", "run", "ilspycmd", "--", str(dll), "-r", str(refs), "--disable-updatecheck")
-        bad = [line.strip() for line in listing.splitlines() if LOGIC.search(line)]
+        bad = logic_lines(listing)
         if bad:
             sys.exit(f"FAIL: the {dll.name} listing contains logic, not only stubs:\n  " + "\n  ".join(bad[:10]))
         listing = public_only(listing)
