@@ -256,7 +256,12 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
 - Step 10 (2026-11-12): decisions 1–7 approved with the spec. No deviation from the plan.
   - Found while drafting: the HT notes blamed the template, but init already copies the surface's packages, only
     once. HT's AC project (2026-11-09) predates the slice-1 packages (2026-11-11), hence the drift check.
-  - **Release 0.1.2:** a separate release PR (version, changelog date, README pin), as for 0.1.1.
+  - **Released 0.1.2 (2026-11-12):**
+    - code in PR 6 (Sonar S5855 fixed there), release PR 7;
+    - tag `v0.1.2` on merge commit `194bfcf`;
+    - the release run passed and published the wheel and the sdist with the changelog notes;
+    - `uvx --isolated --from git+…@v0.1.2 speckit-ac --version` prints `0.1.2`;
+    - `master` then moved to `0.1.3.dev0` with an empty `[Unreleased]`.
   - **HT after `speckit-ac upgrade`:** add the three surface packages (the check prints the lines); the local DI
     line may then stay or go. Remove HT's `speckit-ac-fixes.md` items once the package matches the local copy.
   - Known limits (spec, out of scope): packages of the surface's project-to-project dependencies are not checked
