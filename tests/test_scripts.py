@@ -737,6 +737,8 @@ def test_logic_lines_quote_the_original_line(export_refs):
     ("c = '\\''; d", "c = ''; d"),                  # escaped char literal
     ('a = """x "q" y"""; b', 'a = ""; b'),          # raw string
     ('a = "unterminated return', 'a = ""'),         # an unterminated literal hides the rest of its line only
+    ('a = ""; if (b) c = $"d"', 'a = ""; if (b) c = ""'),  # empty string, then code, then an interpolated string
+    ('f(@x, "y")', 'f(@x, "")'),                     # @identifier is not a verbatim prefix
     ("x; // return", "x; "),
     ("/* if (a) */ x", "  x"),
 ])

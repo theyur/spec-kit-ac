@@ -39,8 +39,9 @@ TYPE_DECL = re.compile(r"^(?P<indent>\t*)(?P<mods>(?:(?:public|internal|private|
                        r"readonly|partial|file|unsafe|ref|new)\s+)*)(?:class|struct|interface|enum|record|delegate)\s")
 NON_PUBLIC = re.compile(r"^\s*(?:internal|private|file)\b")
 NAMESPACE = re.compile(r"^namespace (?P<name>[\w.]+)$")
-# The start of a string literal: an optional $ / @ prefix (interpolated, verbatim) and the opening quote(s).
-STRING_START = re.compile(r'(\$*@\$*|\$+)?("{3,}|")')
+# The start of a string literal: an optional $ / @ prefix (interpolated, verbatim) and the run of quotes after it
+# (3 or more open a raw string; 1, or 2 for an empty string, open a regular one).
+STRING_START = re.compile(r'([$@]*)("+)')
 
 
 def run(*args):
@@ -102,7 +103,7 @@ def code_only(line):
             out.append(c)
             i += 1
             continue
-        prefix, quotes = start.group(1) or "", start.group(2)
+        prefix, quotes = start.group(1), start.group(2)
         if "@" in prefix:  # verbatim, whatever the quote count: @"""a"" b" starts with an escaped quote
             j = i + len(prefix) + 1
             while j < n:
@@ -117,7 +118,7 @@ def code_only(line):
             end = line.find(quotes, start.end())
             i = n if end < 0 else end + len(quotes)
         else:
-            j = start.end()
+            j = i + len(prefix) + 1
             while j < n and line[j] != '"':
                 j += 2 if line[j] == "\\" else 1
             i = j + 1
