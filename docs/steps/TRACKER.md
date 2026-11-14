@@ -280,3 +280,9 @@ Status values: `todo` · `spec-draft` · `spec-approved` · `planning` · `imple
     from this branch, Claude Code shows the hint when typing `/speckit-ac-critic`.
   - Local test runs: when the temp folder is on a drive without symlink support (or one git refuses as unsafe),
     pass `--basetemp` on an NTFS drive; 48 deploy and 3 command-walk tests otherwise fail for that reason only.
+  - **Released 0.1.3 (2026-11-14):**
+    - code in PR 12, release PR 13;
+    - tag `v0.1.3` on merge commit `9c98b28`;
+    - the release run passed and published the wheel and the sdist with the changelog notes;
+    - `uvx --isolated --from git+…@v0.1.3 speckit-ac --version` prints `0.1.3`;
+    - `master` then moved to `0.1.4.dev0` with an empty `[Unreleased]`.
