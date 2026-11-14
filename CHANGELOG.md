@@ -5,7 +5,7 @@ All notable changes to spec-kit-ac are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). After a release, `master` carries the next `.dev0`
 version and an `## [Unreleased]` section until the next release.
 
-## [Unreleased]
+## [0.1.3] - 2026-11-14
 
 ### Fixed
 
@@ -97,7 +97,7 @@ interactive Claude Code; first used in a real project (Habit Tracker).
 - An end-to-end sample with a planted implementation bug and a contradicting second feature
   (`tests/e2e/`).
 
-[Unreleased]: https://github.com/theyur/spec-kit-ac/compare/v0.1.2...master
+[0.1.3]: https://github.com/theyur/spec-kit-ac/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/theyur/spec-kit-ac/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/theyur/spec-kit-ac/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/theyur/spec-kit-ac/releases/tag/v0.1.0
