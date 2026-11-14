@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -255,6 +256,38 @@ def test_patch_without_metadata_inserts_before_the_closing_line():
     assert deploy.patch_skill_text(text) == "---\nname: x\ndisable-model-invocation: true\n---\nbody\n"
 
 
+INIT_HINT = 'argument-hint: "[smoke]"'
+
+
+def test_patch_adds_the_hint_after_the_flag_before_metadata():
+    assert deploy.patch_skill_text(SKILL_TEXT, INIT_HINT) == SKILL_TEXT.replace(
+        "metadata:\n", f"disable-model-invocation: true\n{INIT_HINT}\nmetadata:\n")
+
+
+def test_patch_adds_the_hint_when_the_flag_is_already_there():
+    flagged = deploy.patch_skill_text(SKILL_TEXT)
+    assert deploy.patch_skill_text(flagged, INIT_HINT) == deploy.patch_skill_text(SKILL_TEXT, INIT_HINT)
+
+
+def test_patch_replaces_a_different_hint():
+    text = SKILL_TEXT.replace("compatibility: c\n", 'compatibility: c\nargument-hint: "[old]"\n')
+    assert deploy.patch_skill_text(text, INIT_HINT) == SKILL_TEXT.replace(
+        "compatibility: c\n", f"compatibility: c\n{INIT_HINT}\n").replace(
+        "metadata:\n", "disable-model-invocation: true\nmetadata:\n")
+
+
+def test_patch_without_a_hint_keeps_an_existing_one():
+    text = SKILL_TEXT.replace("compatibility: c\n", 'compatibility: c\nargument-hint: "[own]"\n')
+    assert 'argument-hint: "[own]"\n' in deploy.patch_skill_text(text, None)
+
+
+def test_patch_hint_keeps_crlf_and_is_idempotent():
+    text = SKILL_TEXT.replace("\n", "\r\n")
+    patched = deploy.patch_skill_text(text, INIT_HINT)
+    assert patched == text.replace("metadata:\r\n", f"disable-model-invocation: true\r\n{INIT_HINT}\r\nmetadata:\r\n")
+    assert deploy.patch_skill_text(patched, INIT_HINT) == patched
+
+
 @pytest.mark.parametrize("text", ["no frontmatter\n", "---\nname: x\n"])
 def test_patch_refuses_broken_frontmatter(text):
     with pytest.raises(DeployError):
@@ -268,10 +301,63 @@ def test_patch_skills_makes_real_files(project, host, payload, symlinks):
     if symlinks:
         assert (project / SKILL).is_symlink()
     target = (project / SKILL).read_text(encoding="utf-8")
+    assert "argument-hint" not in target  # spec-kit drops it on --dev installs (#10)
     deploy.patch_skills(project)
     assert not (project / SKILL).is_symlink()
-    assert (project / SKILL).read_text(encoding="utf-8") == deploy.patch_skill_text(target)
+    assert (project / SKILL).read_text(encoding="utf-8") == deploy.patch_skill_text(target, INIT_HINT)
     assert "source: ac:commands/speckit.ac.init.md" in (project / SKILL).read_text(encoding="utf-8")
+
+
+def test_patch_skills_writes_nothing_the_second_time(project, host, payload, monkeypatch):
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    deploy.patch_skills(project)
+    writes = []
+    monkeypatch.setattr(Path, "write_bytes", lambda self, data: writes.append(self))
+    deploy.patch_skills(project)
+    assert writes == []
+
+
+def test_install_gives_every_skill_its_command_hint(project, host, payload):
+    install(project, host, payload)
+    for skill in sorted((project / ".claude/skills").glob("speckit-ac-*/SKILL.md")):
+        command = payload / "commands" / ("speckit.ac." + skill.parent.name.removeprefix("speckit-ac-") + ".md")
+        hint = re.search(r"^argument-hint: .*$", command.read_text(encoding="utf-8"), re.MULTILINE).group(0)
+        assert hint in skill.read_text(encoding="utf-8").splitlines()
+
+
+def test_patch_skills_without_a_source_gives_the_flag_and_no_hint(project, host, payload):
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    skill = project / SKILL
+    skill.write_text(skill.read_text(encoding="utf-8").replace("  source: ac:commands/speckit.ac.init.md\n", ""),
+                     encoding="utf-8")
+    deploy.patch_skills(project)
+    text = skill.read_text(encoding="utf-8")
+    assert deploy.has_skill_flag(text) and "argument-hint" not in text
+
+
+@pytest.mark.parametrize("source", ["ac:commands/../x.md", "ac:commands/plain.md", "ac:commands/C:x.md",
+                                    "ac:commands/x.md:s", "ac:commands/speckit.ac.nope.md", "extension:ac"])
+def test_skill_hint_refuses_other_sources(project, host, payload, source):
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    ext = project / deploy.EXT
+    for planted in (ext / "x.md", ext / "commands/plain.md", ext / "commands/x.md"):  # readable, so only the
+        write(planted, "---\nargument-hint: \"[planted]\"\n---\n")                  # allow-list can refuse them
+    text = SKILL_TEXT.replace("ac:commands/speckit.ac.init.md", source)
+    assert deploy.skill_hint(project, text) is None
+
+
+def test_skill_hint_reads_the_installed_command(project, host, payload):
+    host.symlinks = False
+    deploy.specify_add(project, host, payload)
+    assert deploy.skill_hint(project, SKILL_TEXT) == INIT_HINT
+    command = project / deploy.EXT / "commands/speckit.ac.init.md"
+    command.write_bytes(b"---\nargument-hint: \xff\n---\n")  # not UTF-8: no hint, no error
+    assert deploy.skill_hint(project, SKILL_TEXT) is None
+    command.unlink()
+    assert deploy.skill_hint(project, SKILL_TEXT) is None
 
 
 def test_patch_skills_refuses_a_skill_folder_that_leads_outside(project, host, payload, tmp_path):
@@ -557,6 +643,25 @@ def test_doctor_folds_crlf(project, host, payload, capsys):
     capsys.readouterr()
     code, out = doctor(project, host, capsys)
     assert code == 0, out
+    assert "argument-hint" not in out  # the hint comparison folds CRLF too
+
+
+def test_doctor_warns_on_a_missing_hint(project, host, payload, capsys):
+    """S11-R06: a skill without its command's argument-hint is a warning, not a FAIL."""
+    install(project, host, payload)
+    skill = project / SKILL
+    skill.write_text(skill.read_text(encoding="utf-8").replace('argument-hint: "[smoke]"\n', ""), encoding="utf-8")
+    m = manifest(project)
+    for entry in m["files"]:
+        if entry["path"] == SKILL:
+            entry["sha256"] = deploy.content_hash(skill)
+    (project / deploy.MANIFEST).write_text(json.dumps(m, indent=2), encoding="utf-8")
+    capsys.readouterr()
+    code, out = doctor(project, host, capsys)
+    assert code == 0, out
+    assert "[FAIL]" not in out
+    assert f"[warn] {SKILL} lacks the command's argument-hint (run `speckit-ac upgrade`)" in out
+    assert out.count("argument-hint") == 1
 
 
 def valid_config(project):

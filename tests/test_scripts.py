@@ -746,6 +746,54 @@ def test_code_only(export_refs, line, code):
     assert export_refs.code_only(line) == code
 
 
+# Issue #9: verbatim and raw strings and /* */ comments may span lines; their later lines are not code.
+MULTILINE_CLEAN = [
+    'public const string R = """\n\t\treturn x;\n\t\t""";\n',                # raw string, `return` on line 2
+    'public const string V = @"a\nif (a) ""b""\nc";\n',                      # verbatim, `if (` on a later line
+    'public const string I = $@"a {x}\nawait y\n";\n',                       # interpolated verbatim
+    'public const string Q = """"\n"""\nwhile (x)\n"""";\n',                 # 4-quote raw holding a """ line
+    '/* a\nwhile (x)\n*/ public int X;\n',                                   # block comment
+]
+MULTILINE_MATCH = [
+    ('public const string R = """\n\tx\n\t""";\n\treturn y;\n', ["return y;"]),  # statement after a closed literal
+    ('public const string V = @"a\nb";\nif (c)\n', ["if (c)"]),
+    ("/* a\nb */ if (b)\n", ["b */ if (b)"]),                                  # statement after the closing */
+]
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("listing", MULTILINE_CLEAN)
+def test_logic_lines_multiline_literals_are_not_code(export_refs, listing, newline):
+    assert export_refs.logic_lines(f"namespace A\n{{\n{listing}}}\n".replace("\n", newline)) == []
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("listing, expected", MULTILINE_MATCH)
+def test_logic_lines_after_a_multiline_literal(export_refs, listing, expected, newline):
+    assert export_refs.logic_lines(f"namespace A\n{{\n{listing}}}\n".replace("\n", newline)) == expected
+
+
+@pytest.mark.parametrize("text, code", [
+    ('a = @"x\ny\nz"; b', 'a = ""\n\n; b'),             # verbatim keeps its newlines
+    ('a = """\nx\n"""; b', 'a = ""\n\n; b'),            # raw keeps its newlines
+    ("/* x\ny */ b", " \n b"),                          # block comment keeps its newlines
+    ('a = "x\nreturn y;', 'a = ""\nreturn y;'),         # a regular string ends at its line
+    ("c = '\nreturn y;", "c = ''\nreturn y;"),          # a char literal ends at its line
+    ('a = "x\\\nreturn y;', 'a = ""\nreturn y;'),       # a backslash does not escape the newline
+    ("x; // a\nreturn y;", "x; \nreturn y;"),           # // ends at its line
+    ('a = @"x\nreturn y;', 'a = ""\n'),                 # an unterminated verbatim hides the rest, newlines kept
+])
+def test_code_only_multiline(export_refs, text, code):
+    assert export_refs.code_only(text) == code
+    assert export_refs.code_only(text).count("\n") == text.count("\n")
+
+
+def test_logic_lines_refuses_a_changed_line_count(export_refs, monkeypatch):
+    monkeypatch.setattr(export_refs, "code_only", lambda text: text.replace("\n", ""))
+    with pytest.raises(ValueError, match="line count"):
+        export_refs.logic_lines("a\nb\n")
+
+
 def pkg(pid, version=None, private="", implicit=False):
     return {"id": pid, "version": version, "privateAssets": private, "implicit": implicit}
 

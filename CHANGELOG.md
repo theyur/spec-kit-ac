@@ -7,7 +7,24 @@ version and an `## [Unreleased]` section until the next release.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- `export_refs.py` no longer reads a multi-line string literal (verbatim `@"…"`, raw `"""…"""`) or a multi-line
+  `/* … */` comment as logic. A keyword such as `return` or `if (` on a later line of one used to fail the logic
+  check with "the listing contains logic, not only stubs" (#9).
+- The `/speckit-ac-*` skills show their argument hint in Claude Code's autocomplete again. spec-kit drops
+  `argument-hint` when it renders the skills; install and upgrade now copy it from each command (#10).
+  `speckit-ac doctor` warns when a skill lacks it.
+
+### Changed
+
+- `/speckit-ac-critic`: the critic sub-agent replies with the full pass summary (verdict, counts, one line per
+  MAJOR and MINOR note), so its own window shows the findings even when the host collapses the main agent's
+  mid-turn text (#11).
+
+### Upgrade
+
+- Run `speckit-ac upgrade` in existing installs to get the argument hints and the new critic reply.
 
 ## [0.1.2] - 2026-11-12
 
