@@ -184,4 +184,5 @@ None is blocking.
   The allow-list mutation was missed at first (the refused targets did not exist); the test now plants readable
   targets.
 - No local absolute path in any changed or new file.
-- Not run: S11-A05 (the hint in Claude Code's autocomplete; manual).
+- S11-A05 (manual, by the user, 2026-11-14): after `speckit-ac upgrade` from this branch in a throwaway worktree of
+  the e2e sample, Claude Code shows the argument hint for `/speckit-ac-critic`. Assumption 1 confirmed.
