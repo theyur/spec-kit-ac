@@ -5,6 +5,7 @@ Skipped without `specify` (spec-kit) or off Windows. Each test builds a fresh `s
 """
 import json
 import platform
+import re
 import shutil
 import subprocess
 import zipfile
@@ -58,6 +59,19 @@ def installed_skills(root):
     return sorted((root / ".claude/skills").glob("speckit-ac-*/SKILL.md"))
 
 
+def assert_hints(root, payload):
+    """#10 (S11-R07): each skill carries its command's argument-hint line, read here without deploy's lookup."""
+    skills = installed_skills(root)
+    assert len(skills) == 5
+    for skill in skills:
+        command = payload / "commands" / ("speckit.ac." + skill.parent.name.removeprefix("speckit-ac-") + ".md")
+        hint = re.search(r"^argument-hint: .+$", command.read_text(encoding="utf-8"), re.MULTILINE).group(0)
+        assert hint in skill.read_bytes().decode("utf-8").splitlines(), skill
+    critic = root / ".claude/skills/speckit-ac-critic/SKILL.md"
+    assert "When finished, reply with exactly this pass summary and nothing else:" in critic.read_text(
+        encoding="utf-8")
+
+
 def test_round_trip_fresh_project(project, payload, capsys):
     """(a) + A07: a fresh project comes back byte for byte; no bytecode reaches the install."""
     before = snapshot(project)
@@ -85,6 +99,7 @@ def test_clone_upgrade_uninstall(project, payload, tmp_path, capsys):
     (e) uninstall leaves no speckit-ac skill, and the project round-trips after the upgrade."""
     before = snapshot(project)
     deploy.install(project, payload=payload)
+    assert_hints(project, payload)
     git("add", "-A", cwd=project)
     git("commit", "-qm", "install speckit-ac", cwd=project)
     modes = run("git", "ls-files", "-s", "--", ".claude/skills", cwd=project)
@@ -97,6 +112,7 @@ def test_clone_upgrade_uninstall(project, payload, tmp_path, capsys):
     for skill in installed_skills(clone):
         assert not skill.is_symlink()
         assert deploy.has_skill_flag(skill.read_bytes().decode("utf-8").replace("\r\n", "\n"))
+    assert_hints(clone, payload)
     capsys.readouterr()
     code = deploy.doctor(clone)
     out = capsys.readouterr().out
@@ -106,6 +122,7 @@ def test_clone_upgrade_uninstall(project, payload, tmp_path, capsys):
     assert deploy.upgrade(project, payload=payload) == 0
     for skill in installed_skills(project):
         assert not skill.is_symlink() and deploy.has_skill_flag(skill.read_text(encoding="utf-8"))
+    assert_hints(project, payload)
     capsys.readouterr()
     assert deploy.doctor(project) == 0, capsys.readouterr().out
 

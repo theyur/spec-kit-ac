@@ -50,6 +50,10 @@ EMPTY_EXTENSIONS_YML = "installed: []\nsettings:\n  auto_execute_hooks: true\nho
 MIN_SPECIFY = (1, 0, 2)
 MIN_PYTHON = (3, 11)
 SKILL_FLAG = "disable-model-invocation: true"
+HINT_KEY = re.compile(r"argument-hint\s*:")
+# A skill's metadata `source:` line as spec-kit renders it for this extension (`  source: ac:commands/<file>`).
+SKILL_SOURCE = re.compile(r"""\s+source\s*:\s*['"]?ac:commands/([^'"\s]+)['"]?\s*""")
+COMMAND_FILE = re.compile(r"speckit\.ac\.[a-z0-9-]+\.md")
 MANUAL_STEPS = f"""Undo by hand, in this order:
   1. In {SETTINGS}, remove the PreToolUse group whose command names {GUARD_REL}. Do this first: a registered
      guard whose file is gone blocks every Claude Code tool call.
@@ -291,8 +295,37 @@ def specify_remove(root: Path, host: Host):
 
 # ---- skills (R06) ---------------------------------------------------------------------------------------------
 
-def patch_skill_text(text: str) -> str:
-    """Add or set `disable-model-invocation: true` in the frontmatter; every other byte stays."""
+def frontmatter(text: str) -> list[str] | None:
+    """The frontmatter lines (without line endings) of a `---` … `---` header, or None when there is none."""
+    lines = text.splitlines()
+    if not lines or lines[0] != "---" or "---" not in lines[1:]:
+        return None
+    return lines[1:lines.index("---", 1)]
+
+
+def hint_line(text: str) -> str | None:
+    """The frontmatter's `argument-hint: …` line as written (trailing whitespace dropped), or None."""
+    return next((line.rstrip() for line in frontmatter(text) or [] if HINT_KEY.match(line)), None)
+
+
+def skill_hint(root: Path, skill_text: str) -> str | None:
+    """The `argument-hint` line of the command a speckit-ac skill was rendered from: its metadata `source:
+    ac:commands/<file>` names the file in the installed extension. None when any piece is missing or unreadable:
+    the hint is cosmetic and never fails install, upgrade or doctor."""
+    source = next((m.group(1) for line in frontmatter(skill_text) or []
+                   if (m := SKILL_SOURCE.fullmatch(line))), None)
+    if not source or not COMMAND_FILE.fullmatch(source):  # a plain command file name only: no drive, stream or ..
+        return None
+    try:
+        text = (root / EXT / "commands" / source).read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return hint_line(text)
+
+
+def patch_skill_text(text: str, hint: str | None = None) -> str:
+    """Add or set `disable-model-invocation: true` in the frontmatter and, when the command has one, its
+    `argument-hint` line (`hint`, as written in the command); every other byte stays."""
     lines = text.splitlines(keepends=True)
     if not lines or lines[0].rstrip("\r\n") != "---":
         raise DeployError("a speckit-ac skill has no frontmatter")
@@ -300,13 +333,20 @@ def patch_skill_text(text: str) -> str:
     if close is None:
         raise DeployError("a speckit-ac skill has an unterminated frontmatter")
     eol = lines[0][3:] or "\n"
-    for i in range(1, close):
-        if re.match(r"disable-model-invocation\s*:", lines[i]):
-            body = lines[i].rstrip("\r\n")
-            lines[i] = SKILL_FLAG + lines[i][len(body):]
-            return "".join(lines)
-    at = next((i for i in range(1, close) if re.match(r"metadata\s*:", lines[i])), close)
-    lines.insert(at, SKILL_FLAG + eol)
+
+    def put(key: re.Pattern, value: str):
+        nonlocal close
+        at = next((i for i in range(1, close) if key.match(lines[i])), None)
+        if at is not None:
+            lines[at] = value + lines[at][len(lines[at].rstrip("\r\n")):]
+            return
+        at = next((i for i in range(1, close) if re.match(r"metadata\s*:", lines[i])), close)
+        lines.insert(at, value + eol)
+        close += 1
+
+    put(re.compile(r"disable-model-invocation\s*:"), SKILL_FLAG)
+    if hint is not None:
+        put(HINT_KEY, hint)
     return "".join(lines)
 
 
@@ -316,10 +356,7 @@ def skill_files(root: Path) -> list[Path]:
 
 
 def has_skill_flag(text: str) -> bool:
-    lines = text.splitlines()
-    if not lines or lines[0] != "---" or "---" not in lines[1:]:
-        return False
-    return any(re.fullmatch(r"disable-model-invocation\s*:\s*true\s*", line) for line in lines[1:lines.index("---", 1)])
+    return any(re.fullmatch(r"disable-model-invocation\s*:\s*true\s*", line) for line in frontmatter(text) or [])
 
 
 def patch_skills(root: Path) -> list[str]:
@@ -343,7 +380,8 @@ def patch_skills(root: Path) -> list[str]:
             data = skill.read_bytes()  # through the link
         except OSError as error:
             raise DeployError(f"cannot read {skill}: {error}") from None
-        new = patch_skill_text(data.decode("utf-8")).encode("utf-8")
+        text = data.decode("utf-8")
+        new = patch_skill_text(text, skill_hint(root, text)).encode("utf-8")
         if skill.is_symlink():
             skill.unlink()
         elif data == new:
@@ -888,6 +926,13 @@ def doctor(root: Path, host: Host | None = None) -> int:
             elif not has_skill_flag(path.read_bytes().decode("utf-8", "replace")):
                 line("FAIL", f"{rel} lacks `{SKILL_FLAG}` (run `speckit-ac upgrade`)")
                 bad += 1
+            try:
+                text = path.read_bytes().decode("utf-8", "replace")  # through a link too
+            except OSError:
+                continue
+            want = skill_hint(root, text)
+            if want and hint_line(text) != want:
+                line("warn", f"{rel} lacks the command's argument-hint (run `speckit-ac upgrade`)")
         if not bad:
             line("ok", f"{len(skills)} skills are real files with `{SKILL_FLAG}`")
 

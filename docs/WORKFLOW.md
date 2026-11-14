@@ -282,12 +282,13 @@ a matching marker is denied every call.
   `.claude/settings.json` (the guard registration) and `.workflow/config.json` (which shapes every
   guard rule; `/speckit-ac-init` must write it, so the guard cannot deny it). `speckit-ac doctor`
   checks the deployed files against the hashes in `.workflow/deploy.json` (CRLF folded to LF), the
-  skills' `disable-model-invocation: true`, the guard registration and a guard self-test, and the
+  skills' `disable-model-invocation: true` (and warns when a skill lacks its command's
+  `argument-hint`), the guard registration and a guard self-test, and the
   config's Python command; it writes nothing and runs no dotnet (`/speckit-ac-init` verifies the .NET
   side).
 - A user's own `specify integration upgrade` or `specify extension add --force` silently turns the
-  `speckit-ac-*` skills back into model-invocable ones (the guard still blocks the call). `speckit-ac
-  doctor` reports it; `speckit-ac upgrade` patches them again.
+  `speckit-ac-*` skills back into model-invocable ones (the guard still blocks the call) and can drop
+  their argument hints. `speckit-ac doctor` reports it; `speckit-ac upgrade` patches them again.
 - `speckit-ac install` rewrites `.claude/settings.json` with 2-space JSON indentation (spec-kit's own
   style; spec-kit also rewrites the file on every `extension add` / `remove`). A file in that style
   comes back from `uninstall` byte for byte; any other style keeps its content but not its

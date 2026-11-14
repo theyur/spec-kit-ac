@@ -32,7 +32,8 @@ CONFIGURATION = "Debug"
 # Build output folders only (bin, obj, obj-ref, bin_x, …); not source folders such as Bindings/ or objectives/.
 BUILD_FOLDER = re.compile(r"^(bin|obj)([-_.].*)?$", re.IGNORECASE)
 # Statements that can't appear in a reference-assembly listing, where every body is `throw null`. `return` followed
-# by `:` is the attribute target of `[return: NotNullIfNotNull(...)]`, not a statement. Scanned on code_only(line).
+# by `:` is the attribute target of `[return: NotNullIfNotNull(...)]`, not a statement. Scanned line by line on
+# code_only(listing).
 LOGIC = re.compile(r"\breturn\b(?!\s*:)|\bif\s*\(|\bfor(each)?\s*\(|\bwhile\s*\(|\bswitch\b|\bawait\b|\btry\b")
 # A type declaration as ilspycmd writes it: tab indentation, modifiers, keyword. Body braces are on their own lines.
 TYPE_DECL = re.compile(r"^(?P<indent>\t*)(?P<mods>(?:(?:public|internal|private|protected|sealed|abstract|static|"
@@ -78,27 +79,37 @@ def check_no_internals_visible_to(project):
         sys.exit("FAIL: InternalsVisibleTo puts internal members into the reference assembly:\n  " + "\n  ".join(hits))
 
 
-def code_only(line):
-    """The line with string and char literals emptied and comments removed, so keywords inside them don't count.
-    One line at a time: an unterminated literal or comment hides the rest of its line only."""
-    out, i, n = [], 0, len(line)
+def code_only(text):
+    """The text with string and char literals emptied and comments removed, so keywords inside them don't count.
+    Works on a line or the whole listing and keeps every newline, so the result has as many lines as the input.
+    Verbatim and raw strings and /* */ comments may span lines; regular and interpolated strings, char literals and
+    // comments end at their line (C# allows no newline in them). An unterminated verbatim or raw string or block
+    comment hides the rest of the text, an unterminated one-line literal the rest of its line."""
+    out, i, n = [], 0, len(text)
+
+    def line_literal_end(j, close):
+        """The index after a one-line literal whose content starts at j: past its closing quote, or at its line end."""
+        while j < n and text[j] not in (close, "\n"):
+            j += 2 if text[j] == "\\" and j + 1 < n and text[j + 1] != "\n" else 1
+        return j + 1 if j < n and text[j] == close else j
+
     while i < n:
-        if line.startswith("//", i):
-            break
-        if line.startswith("/*", i):
-            end = line.find("*/", i + 2)
-            i = n if end < 0 else end + 2
-            out.append(" ")
+        if text.startswith("//", i):
+            end = text.find("\n", i)
+            i = n if end < 0 else end
             continue
-        c = line[i]
+        if text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            stop = n if end < 0 else end + 2
+            out.append(" " + "\n" * text.count("\n", i, stop))
+            i = stop
+            continue
+        c = text[i]
         if c == "'":
-            j = i + 1
-            while j < n and line[j] != "'":
-                j += 2 if line[j] == "\\" else 1
             out.append("''")
-            i = j + 1
+            i = line_literal_end(i + 1, "'")
             continue
-        start = STRING_START.match(line, i) if c in '$@"' else None
+        start = STRING_START.match(text, i) if c in '$@"' else None
         if not start:
             out.append(c)
             i += 1
@@ -107,28 +118,30 @@ def code_only(line):
         if "@" in prefix:  # verbatim, whatever the quote count: @"""a"" b" starts with an escaped quote
             j = i + len(prefix) + 1
             while j < n:
-                if line[j] == '"':
-                    if line.startswith('""', j):
+                if text[j] == '"':
+                    if text.startswith('""', j):
                         j += 2
                         continue
                     break
                 j += 1
-            i = j + 1
+            stop = min(j + 1, n)
         elif len(quotes) >= 3:  # raw string: ends at the same run of quotes
-            end = line.find(quotes, start.end())
-            i = n if end < 0 else end + len(quotes)
+            end = text.find(quotes, start.end())
+            stop = n if end < 0 else end + len(quotes)
         else:
-            j = i + len(prefix) + 1
-            while j < n and line[j] != '"':
-                j += 2 if line[j] == "\\" else 1
-            i = j + 1
-        out.append('""')
+            stop = line_literal_end(i + len(prefix) + 1, '"')
+        out.append('""' + "\n" * text.count("\n", i, stop))
+        i = stop
     return "".join(out)
 
 
 def logic_lines(listing):
-    """The listing lines (stripped, otherwise as written) that hold a statement outside literals and comments."""
-    return [line.strip() for line in listing.splitlines() if LOGIC.search(code_only(line))]
+    """The listing lines (stripped, otherwise as written) that hold a statement outside literals and comments.
+    code_only runs once over the whole listing, so a multi-line literal or comment is not read as code."""
+    lines, code = listing.split("\n"), code_only(listing).split("\n")
+    if len(code) != len(lines):
+        raise ValueError(f"code_only changed the line count ({len(lines)} -> {len(code)})")
+    return [line.strip() for line, scanned in zip(lines, code) if LOGIC.search(scanned)]
 
 
 def missing_packages(surface, ac, cpm):

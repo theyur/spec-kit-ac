@@ -229,7 +229,13 @@ Verdict rule: REVISE if there is at least one MAJOR note; APPROVE otherwise (MIN
 
 Number notes MAJOR-1..n then MINOR-1..n, most severe first. Do not pad the list; only include issues you verified. Do not include praise sections.
 
-When finished, reply with: the report path, the verdict, and the count of MAJOR and MINOR notes. Nothing else.
+When finished, reply with exactly this pass summary and nothing else:
+Critic pass {n} ({stage}): <verdict>, <a> MAJOR, <b> MINOR — {report_path}
+MAJOR
+- MAJOR-1 <title>: <one line: what is wrong and what it breaks>
+MINOR
+- MINOR-1 <title>: <one line>
+Leave out a heading that has no notes. When earlier passes exist, add one line with the counts of the "Previous notes" table (Resolved / Partly / Unresolved).
 ````
 
 Placeholders:

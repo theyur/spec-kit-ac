@@ -326,6 +326,22 @@ def test_critic_reports_each_pass_to_the_user():
             "or open") in finish
 
 
+def test_critic_replies_with_the_pass_summary():
+    """#11 (S11-R08): the critic's own reply is the step-2 pass summary, so its window shows the notes."""
+    raw = text("critic")
+    template = raw.split("\n## Critic prompt template\n", 1)[1].split("````text\n", 1)[1].split("\n````", 1)[0]
+    assert template.splitlines()[-7:] == [
+        "When finished, reply with exactly this pass summary and nothing else:",
+        "Critic pass {n} ({stage}): <verdict>, <a> MAJOR, <b> MINOR — {report_path}",
+        "MAJOR",
+        "- MAJOR-1 <title>: <one line: what is wrong and what it breaks>",
+        "MINOR",
+        "- MINOR-1 <title>: <one line>",
+        'Leave out a heading that has no notes. When earlier passes exist, add one line with the counts of the '
+        '"Previous notes" table (Resolved / Partly / Unresolved).']
+    assert "the count of MAJOR and MINOR notes. Nothing else." not in raw
+
+
 # ---- walks: each subagent command's script steps in order, the launch through the real guard ------------------
 
 @pytest.fixture
