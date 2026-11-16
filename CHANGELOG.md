@@ -5,7 +5,7 @@ All notable changes to spec-kit-ac are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). After a release, `master` carries the next `.dev0`
 version and an `## [Unreleased]` section until the next release.
 
-## [Unreleased]
+## [0.1.4] - 2026-11-16
 
 ### Fixed
 
@@ -82,11 +82,11 @@ version and an `## [Unreleased]` section until the next release.
 ### Upgrade
 
 - Run `speckit-ac upgrade` in existing installs. It adds the TRX line to the `.gitignore` block.
+  - It stops before any change, and names the file, when `.gitignore` or `.gitattributes` is not UTF-8 or holds
+    a broken block.
 - Init writes the AC project once, so an existing AC project with a Web SDK surface does not get the framework
   reference: add `<FrameworkReference Include="Microsoft.AspNetCore.App" />` to it by hand if its steps need ASP.NET
   Core types.
-  - It stops before any change, and names the file, when `.gitignore` or `.gitattributes` is not UTF-8 or holds
-    a broken block.
 - Untrack TRX files that are already committed with `git rm --cached -- "specs/*/ac-results.trx"`, then commit.
   Git history keeps them.
 - `ac-results.md` files written before the upgrade are not rewritten.
@@ -183,7 +183,7 @@ interactive Claude Code; first used in a real project (Habit Tracker).
 - An end-to-end sample with a planted implementation bug and a contradicting second feature
   (`tests/e2e/`).
 
-[Unreleased]: https://github.com/theyur/spec-kit-ac/compare/v0.1.3...master
+[0.1.4]: https://github.com/theyur/spec-kit-ac/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/theyur/spec-kit-ac/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/theyur/spec-kit-ac/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/theyur/spec-kit-ac/compare/v0.1.0...v0.1.1
