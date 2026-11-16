@@ -42,13 +42,12 @@ Follow the steps exactly. Stop at the first failure and report it.
      numbers).
    - `solution` is null: ask the user which of `solutions` is the product solution, then run
      `init_detect.py --solution <answer>` and continue with that output.
-   - `blockers` not empty: show them and stop, or ask (an `InternalsVisibleTo` blocker: remove it — the
-     user's change — or leave that project out of the surface).
+   - `blockers` not empty: show them and stop.
 2. Ask the user only what detection did not settle, one question at a time:
    - **AC surface** (`proposal.acSurfaceProjects`): the projects whose public API the acceptance tests
      use. Ask when there is more than one candidate; a single candidate is only shown in the summary.
-     A chosen project with `internalsVisibleTo` entries: stop and ask (remove it, or leave the project
-     out).
+     A chosen project with `internalsVisibleTo` files: list them in the summary as information. The
+     export strips internal members from the API listing and fails if a friend is the AC assembly.
    - **Test framework**: ask when `proposal.testFramework` is null (`testFrameworkReason` says why);
      default `xunit3`. Then run `init_detect.py --framework <answer>` (with `--solution` if you used
      it) and use its `supported`.
@@ -62,7 +61,8 @@ Follow the steps exactly. Stop at the first failure and report it.
      project or the refs folder, say why, and ask again.
 3. Show **one summary** of every value about to be written: solution, AC surface projects, unit test
    projects, test framework and runner, target framework, AC project folder, refs folder, spec inputs,
-   whether central package management is on. Mark which values were detected and which are defaults.
+   whether central package management is on, and the `internalsVisibleTo` files of the surface projects
+   (information). Mark which values were detected and which are defaults.
    Wait for an explicit confirmation. Any change: update the value and show the summary again.
 4. `init_config.py --solution <solution> --surface <project> … --unit-tests <project> …
    --ac-project-dir <folder> --refs-dir <folder> --spec-input <path> … --framework <framework>
@@ -127,7 +127,6 @@ session starts, and workspace trust is per folder. Run it again in every new che
   - external effects (email, HTTP, files, …) go through public interfaces;
   - errors are observable (exception types or result types), never silent;
   - the AC surface has a public way to build the system with test doubles;
-  - no `InternalsVisibleTo` in AC surface projects (it leaks internals into the reference
-    assemblies the test writer sees).
+  - `InternalsVisibleTo` never names the AC assembly (the acceptance tests use only the public API).
 - Next: start a **new session** in this folder and run `/speckit-ac-init smoke`; repeat it in every
   new checkout or worktree. Then the first feature: `/speckit-specify`.

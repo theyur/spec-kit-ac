@@ -298,6 +298,15 @@ a matching marker is denied every call.
   definitions to the main agent unless those folders are excluded. Soft rule in `CLAUDE.md`.
 - API names and signatures are visible to the writer. That's by design: tests must use them.
   `const` values and default parameter values are visible in reference assemblies too.
+- An AC surface project may use `InternalsVisibleTo`. Its internal members are stripped from the API listing, but
+  their names (no bodies) stay in the reference DLLs, which only the compiler reads. A guessed internal name
+  gives CS0122 rather than CS0117, so the writer learns that it exists; the same holds for internal types. The
+  export fails when a friend is the AC assembly itself. It also fails when a DLL mentions
+  `InternalsVisibleToAttribute` (a byte search) but its listing shows no friend line. This is meant to catch a
+  changed ilspycmd output, but it also stops an assembly that only uses the attribute type, for example in a
+  public API.
+- A public type that implements an internal interface names it in its base list and its explicit
+  implementations (`void IInner.M()`), with or without `InternalsVisibleTo`.
 - Exception messages from the implementation reach the judge through `ac-results.md`. They don't
   reach the writer only because the judge is told to keep observed values out of the feedback
   section. The script that extracts the feedback is deterministic; its content is not.

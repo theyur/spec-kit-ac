@@ -1,0 +1,42 @@
+// Probe for step 13 (ilspycmd 11.2.0.10050, .NET SDK 11.0.100). The csproj:
+// <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ProduceReferenceAssembly>true</ProduceReferenceAssembly></PropertyGroup>
+// <ItemGroup><InternalsVisibleTo Include="Lib.UnitTests" /><InternalsVisibleTo Include="Lib.Other" Key="0024000004800000940000000602000000240000525341310004000001000100c547cac37abd99c8db225ef2f6c8a3602f3b3606cc9891605d02baa56104f4cfc0734aa39b93bf7852f7d9266654753cc297e7d2edfe0bac1cdcf9f717241550e0a7b191195b7667bb4f64bcb8e2121380fd1d9d46ad2d92d2d15605093924cceaf74c4861eff62abf69b9291ed0a340e113be11e6a7d3113e92484cf7045cc7" /></ItemGroup>
+
+using System;
+using System.Runtime.CompilerServices;
+using System.Diagnostics.CodeAnalysis;
+[assembly: InternalsVisibleTo("Lib.Component, PublicKey=0024000004800000940000000602000000240000525341310004000001000100c547cac37abd99c8db225ef2f6c8a3602f3b3606cc9891605d02baa56104f4cfc0734aa39b93bf7852f7d9266654753cc297e7d2edfe0bac1cdcf9f717241550e0a7b191195b7667bb4f64bcb8e2121380fd1d9d46ad2d92d2d15605093924cceaf74c4861eff62abf69b9291ed0a340e113be11e6a7d3113e92484cf7045cc7")]
+namespace Lib;
+public class Api
+{
+    internal Api(int seed) { Seed = seed; }
+    public Api() { }
+    internal int Seed { get; }
+    public int Count { get; internal set; }
+    public string Name { get; private protected set; } = "";
+    internal int Field;
+    internal const int Max = 5;
+    internal static readonly string Ro = "x";
+    internal event EventHandler? Changed;
+    internal int this[int i] => i;
+    [Obsolete("old")]
+    internal void Old() { }
+    internal int Expr => Seed + 1;
+    [return: NotNull]
+    internal string? Multi { get { return Name; } set { Name = value ?? ""; } }
+    private protected void Pp() { }
+    protected internal void Pi() { }
+    protected internal int PiProp { get; internal set; }
+    internal virtual void V() { }
+    internal T Gen<T>(T x) where T : class => x;
+    internal Nested? N;
+    public class Nested { internal Nested() { } public int X { get; internal init; } }
+    internal class InNested { public void Y() { } }
+    public void Run() => Changed?.Invoke(this, EventArgs.Empty);
+}
+public interface IThing { internal void Hidden() { } void Shown(); }
+public abstract class Base { internal abstract void A(); public abstract void B(); }
+public struct S { internal int F; public int G; private int H; internal S(int f) { F = f; G = 0; H = 0; } }
+public record R(int A) { internal int B { get; init; } }
+internal class Impl { }
+public enum E { A, B }

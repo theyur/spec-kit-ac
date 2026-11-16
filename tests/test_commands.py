@@ -515,3 +515,12 @@ def test_real_spec_kit_install(tmp_path):
         assert f"command: speckit.ac.{name}" in registered
     assert (project / ".specify/extensions/ac/agents/ac-test-writer.md").is_file()
     assert (project / ".specify/extensions/ac/templates/acceptance-template.md").is_file()
+
+
+def test_init_treats_internals_visible_to_as_information():
+    """S13-R09 (#15): no stop on InternalsVisibleTo; the testability bullet names the AC assembly only."""
+    body = " ".join(text("init").split())
+    assert "an `InternalsVisibleTo` blocker" not in body and "stop and ask (remove it" not in body
+    assert ("list them in the summary as information. The export strips internal members from the API listing and "
+            "fails if a friend is the AC assembly.") in body
+    assert "`InternalsVisibleTo` never names the AC assembly (the acceptance tests use only the public API)." in body

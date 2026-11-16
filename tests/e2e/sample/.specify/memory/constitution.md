@@ -22,7 +22,7 @@ Every behaviour change comes with unit tests in `tests/Shop.Pricing.Tests`.
 - Errors are observable through the public API: an exception type or a result value, never only a log
   line.
 - The system can be built with test doubles through public constructors or factories.
-- No `InternalsVisibleTo` in the projects whose public API the acceptance tests use.
+- `InternalsVisibleTo` never names the acceptance-test assembly (the acceptance tests use only the public API).
 
 ## Governance
 

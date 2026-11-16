@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -811,6 +812,251 @@ def test_public_only(export_refs):
     assert not [line for line in out.splitlines() if export_refs.NON_PUBLIC.match(line)]
 
 
+# ---- step 13 (#15): members not visible outside the assembly, friend assemblies --------------------------------
+# Members as ilspycmd 11.2 writes them in a reference assembly (tests/fixtures/ivt/ has the real listings).
+
+def in_type(*members, kind="class"):
+    body = "\n\n".join(members)
+    return f"namespace App.Core\n{{\n\tpublic {kind} Api\n\t{{\n{body}\n\t}}\n}}\n"
+
+
+def member(decl, attrs=()):
+    """A member with a `throw null` body."""
+    return "\n".join([f"\t\t{a}" for a in attrs] + [f"\t\t{decl}", "\t\t{", "\t\t\tthrow null;", "\t\t}"])
+
+
+def prop(decl, *accessors, attrs=(), generated=True):
+    """A property (or event, indexer) with block accessors, each with [CompilerGenerated] when generated."""
+    lines = [f"\t\t{a}" for a in attrs] + [f"\t\t{decl}", "\t\t{"]
+    for accessor in accessors:
+        lines += (["\t\t\t[CompilerGenerated]"] if generated else []) + [
+            f"\t\t\t{accessor}", "\t\t\t{", "\t\t\t\tthrow null;", "\t\t\t}"]
+    return "\n".join(lines + ["\t\t}"])
+
+
+def one(decl):
+    return f"\t\t{decl}"
+
+
+KEEP, KEEP2 = member("public void Keep()"), member("public int Other()")
+
+STRIPPED = [
+    ("method", member("internal void M()"), "class"),
+    ("constructor", member("internal Api(int seed)"), "class"),
+    ("field", one("internal int Field;"), "class"),
+    ("const with its value", one("internal const int Max = 5;"), "class"),
+    ("static readonly", one("internal static readonly string Ro;"), "class"),
+    ("event", prop("internal event EventHandler? Changed", "add", "remove"), "class"),
+    ("indexer", prop("internal int this[int i]", "get", generated=False), "class"),
+    ("expression-bodied property", prop("internal int Expr", "get", generated=False), "class"),
+    ("property with stacked attributes", prop("internal string? Multi", "get", "set", generated=False,
+                                              attrs=('[Obsolete("old")]', "[JsonIgnore]")), "class"),
+    ("method with an attribute", member("internal void Old()", attrs=('[Obsolete("old")]',)), "class"),
+    ("internal virtual", member("internal virtual void V()"), "class"),
+    ("generic with a constraint", member("internal T Gen<T>(T x) where T : class"), "class"),
+    ("one-line internal abstract method", one("internal abstract void A();"), "abstract class"),
+    ("one-line internal abstract property", one("internal abstract int P2 { get; }"), "abstract class"),
+    ("one-line internal abstract indexer", one("internal abstract int this[int i] { get; }"), "abstract class"),
+    ("internal abstract event", one("internal abstract event EventHandler E2;"), "abstract class"),
+    ("interface default member", member("internal void Hidden()"), "interface"),
+    ("interface one-line property", one("internal int Q2 { get; }"), "interface"),
+    ("struct internal field", one("internal int F;"), "struct"),
+    ("struct private field", one("private int H;"), "struct"),
+    ("private protected method", member("private protected void Pp()"), "class"),
+    ("auto-property", prop("internal int B", "get", "init"), "record"),
+]
+
+
+@pytest.mark.parametrize("name, hidden, kind", STRIPPED, ids=[s[0] for s in STRIPPED])
+def test_visible_members_strips(export_refs, name, hidden, kind):
+    out = export_refs.visible_members(in_type(KEEP, hidden, KEEP2, kind=kind))
+    assert out == in_type(KEEP, KEEP2, kind=kind)
+    assert export_refs.hidden_lines(out) == []
+
+
+KEPT = [
+    ("public", member("public void M()"), "class"),
+    ("protected", member("protected void M()"), "class"),
+    ("protected internal", member("protected internal void Pi()"), "class"),
+    ("protected internal property", prop("protected internal int PiProp", "get"), "class"),
+    ("interface member", one("void Shown();"), "interface"),
+    ("interface one-line property", one("int Q1 { get; }"), "interface"),
+    ("explicit implementation", member("void IInner.M()"), "class"),
+    ("public abstract one-line property", one("public abstract int P3 { get; set; }"), "abstract class"),
+    ("public extern property", one("public static extern int X { get; }"), "class"),
+    ("public abstract event", one("public abstract event EventHandler E1;"), "abstract class"),
+    ("const in a literal", one('public const string Hint = "internal use only";'), "class"),
+]
+
+
+@pytest.mark.parametrize("name, kept, kind", KEPT, ids=[k[0] for k in KEPT])
+def test_visible_members_keeps(export_refs, name, kept, kind):
+    listing = in_type(KEEP, kept, KEEP2, kind=kind)
+    assert export_refs.visible_members(listing) == listing
+    assert export_refs.hidden_lines(listing) == []
+
+
+ACCESSORS = [
+    (prop("public int Count", "get", "internal set"), prop("public int Count", "get")),
+    (prop("public int X", "get", "internal init"), prop("public int X", "get")),
+    (prop("public string Name", "get", "private protected set"), prop("public string Name", "get")),
+    (prop("protected internal int PiProp", "get", "internal set"), prop("protected internal int PiProp", "get")),
+    (one("public abstract int P1 { get; internal set; }"), one("public abstract int P1 { get; }")),
+    (one("protected internal abstract int P4 { get; private protected set; }"),
+     one("protected internal abstract int P4 { get; }")),
+    (one("int Q { get; internal set; }"), one("int Q { get; }")),  # an interface member has no modifier
+    (one('public abstract int this[string k = "x"] { get; internal set; }'),
+     one('public abstract int this[string k = "x"] { get; }')),  # a literal before the list
+]
+
+
+@pytest.mark.parametrize("before, after", ACCESSORS)
+def test_visible_members_strips_hidden_accessors(export_refs, before, after):
+    out = export_refs.visible_members(in_type(KEEP, before))
+    assert out == in_type(KEEP, after)
+    assert export_refs.hidden_lines(out) == []
+
+
+def test_visible_members_nested_public_type(export_refs):
+    nested = "\n".join(["\t\tpublic class Nested", "\t\t{", "\t\t\tinternal Nested()", "\t\t\t{",
+                        "\t\t\t\tthrow null;", "\t\t\t}", "", "\t\t\tpublic void Y()", "\t\t\t{", "\t\t\t\tthrow null;",
+                        "\t\t\t}", "\t\t}"])
+    out = export_refs.visible_members(in_type(nested))
+    assert out == in_type("\n".join(["\t\tpublic class Nested", "\t\t{", "\t\t\tpublic void Y()", "\t\t\t{",
+                                      "\t\t\t\tthrow null;", "\t\t\t}", "\t\t}"]))
+
+
+def test_visible_members_enum_is_unchanged(export_refs):
+    listing = "namespace App.Core\n{\n\tpublic enum E\n\t{\n\t\tA,\n\t\tB\n\t}\n}\n"
+    assert export_refs.visible_members(listing) == listing
+
+
+@pytest.mark.parametrize("members, expected", [
+    ((one("internal int F;"), KEEP), (KEEP,)),                                       # first in the body
+    ((KEEP, one("internal int F;")), (KEEP,)),                                       # last in the body
+    ((KEEP, one("internal int F;"), member("internal void M()"), KEEP2), (KEEP, KEEP2)),  # two in a row
+    ((one("internal int F;"),), ()),                                                 # the only member
+])
+def test_visible_members_blank_lines(export_refs, members, expected):
+    out = export_refs.visible_members(in_type(*members))
+    body = "\n\n".join(expected)
+    assert out == ("namespace App.Core\n{\n\tpublic class Api\n\t{\n" + (body + "\n" if body else "") + "\t}\n}\n")
+
+
+def test_visible_members_after_public_only_leaves_one_blank_line(export_refs):
+    """The probe 1 shape: public_only() drops a nested internal type and leaves two blank lines; an internal field
+    follows."""
+    listing = "\n".join(["namespace App.Core", "{", "\tpublic class Api", "\t{", "\t\tpublic class Nested", "\t\t{",
+                         "\t\t}", "", "\t\tinternal class InNested", "\t\t{", "\t\t\tpublic void Y()", "\t\t\t{",
+                         "\t\t\t\tthrow null;", "\t\t\t}", "\t\t}", "", "\t\tinternal int Field;", "",
+                         "\t\tpublic int Count;", "\t}", "}", ""])
+    out = export_refs.visible_members(export_refs.public_only(listing))
+    assert out == "\n".join(["namespace App.Core", "{", "\tpublic class Api", "\t{", "\t\tpublic class Nested",
+                             "\t\t{", "\t\t}", "", "\t\tpublic int Count;", "\t}", "}", ""])
+
+
+FRIEND_LINES = ['[assembly: AssemblyTitle("Lib")]',
+                '[assembly: InternalsVisibleTo("A")]',
+                '[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("B, PublicKey=0024000004")]',
+                '[assembly: InternalsVisibleToAttribute(" C ")]',
+                '[assembly: global::System.Runtime.CompilerServices.InternalsVisibleTo("D")]',
+                '[assembly: AssemblyDescription("uses InternalsVisibleTo")]']
+
+
+def test_friends_and_their_lines(export_refs):
+    listing = "\n".join(FRIEND_LINES) + "\n" + in_type(KEEP)
+    assert export_refs.friends(listing) == ["A", "B", "C", "D"]
+    out = export_refs.visible_members(listing)
+    assert out == "\n".join([FRIEND_LINES[0], FRIEND_LINES[5]]) + "\n" + in_type(KEEP)
+
+
+@pytest.mark.parametrize("line", ['[assembly:InternalsVisibleTo("A")]',
+                                  '[assembly: InternalsVisibleTo("A", AllInternalsVisible = true)]',
+                                  '[assembly: InternalsVisibleTo("A" + "B")]',
+                                  '[ assembly : InternalsVisibleTo("A")]'])
+def test_friends_unreadable_line(export_refs, line):
+    with pytest.raises(ValueError, match=re.escape(line)):
+        export_refs.friends(line + "\n" + in_type(KEEP))
+
+
+def test_visible_members_leaves_unknown_shapes_for_the_backstops(export_refs):
+    no_body = "\n".join(["\t\tinternal void M()", "\t\tpublic void N();"])
+    commented = one("public int P { get; internal set; } // x")
+    for shape, reported in [(no_body, "internal void M()"), (commented, "public int P { get; internal set; } // x")]:
+        listing = in_type(KEEP, shape)
+        assert export_refs.visible_members(listing) == listing
+        assert export_refs.hidden_lines(listing) == [reported]
+
+
+def test_visible_members_ignores_a_declaration_inside_a_verbatim_string(export_refs):
+    const = "\n".join(['\t\tpublic const string S = @"a', "\t\tinternal int Fake;", 'b";'])
+    listing = in_type(KEEP, const)
+    assert export_refs.visible_members(listing) == listing
+    assert export_refs.hidden_lines(listing) == ["internal int Fake;"]  # NON_PUBLIC reads lines as written
+
+
+@pytest.mark.parametrize("line, hidden", [
+    ("\t\tprivate int x;", True),
+    ("\t\tinternal int x;", True),
+    ("\t\tprivate protected void M()", True),
+    ("\t\tpublic int P { get; internal set; }", True),
+    ("\t\tpublic int P { get; private set; }", True),
+    ("\t\tprotected internal void M()", False),
+    ('\t\tpublic const string S = "internal";', False),
+    ("\t\tpublic void M(); // private", False),
+    ("\t\tpublic int @internal;", False),
+    ("\t\tpublic Internal X;", False),
+    ("\t\tpublic PrivateKey K;", False),
+])
+def test_hidden_lines(export_refs, line, hidden):
+    assert export_refs.hidden_lines(in_type(line)) == ([line.strip()] if hidden else [])
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "ivt"
+
+
+def filtered_fixture(export_refs, name):
+    listing = (FIXTURES / name).read_text(encoding="utf-8")
+    out = export_refs.visible_members(export_refs.public_only(listing))
+    assert export_refs.hidden_lines(out) == [] and "InternalsVisibleTo" not in out
+    assert "\n\n\n" not in out and not re.search(r"\{\n[ \t]*\n", out) and not re.search(r"\n[ \t]*\n[ \t]*\}", out)
+    return listing, out
+
+
+def test_real_listing_members_and_friends(export_refs):
+    """Probe 1 (source.cs.txt): every kind of internal member, three friends (csproj item, item with a key, .cs
+    attribute with a key)."""
+    listing, out = filtered_fixture(export_refs, "listing.cs.txt")
+    assert export_refs.friends(listing) == ["Lib.Component", "Lib.UnitTests", "Lib.Other"]
+    for kept in ["public Api()", "public int Count", "public string Name", "protected internal void Pi()",
+                 "protected internal int PiProp", "public void Run()", "public class Nested", "public int X",
+                 "void Shown();", "public abstract void B();", "protected Base()", "public int G;", "public R(int A)",
+                 "EqualityContract", "public enum E"]:
+        assert kept in out, kept
+    for gone in ["Seed", "Field", "Max", " Ro;", "Changed", "this[int i]", "Expr", "Multi", "Old()", "Pp()", "V()",
+                 "Gen<T>", "InNested", "Hidden()", "void A();", "int F;", "int H;", "S(int f)", "int B"]:
+        assert gone not in out, gone
+
+
+def test_real_listing_one_line_members(export_refs):
+    """Probe 2 (source2.cs.txt): abstract, interface and extern properties, an indexer and events on one line."""
+    listing, out = filtered_fixture(export_refs, "listing2.cs.txt")
+    assert export_refs.friends(listing) == ["Lib.UnitTests"]
+    for kept in ["public abstract int P1 { get; }", "public abstract int P3 { get; set; }",
+                 "protected internal abstract int P4 { get; }", "public int Auto", "public abstract event EventHandler E1;",
+                 "int Q1 { get; }", "int Q3", "event EventHandler E3;", "public static extern int X { get; }"]:
+        assert kept in out, kept
+    for gone in ["P2", "this[int i]", "E2", "Q2", "Q4"]:
+        assert gone not in out, gone
+
+
+def test_export_refs_has_no_source_scan(export_refs):
+    """S13-A04: the export no longer stops on the text InternalsVisibleTo alone."""
+    source = (PAYLOAD / "scripts" / "export_refs.py").read_text(encoding="utf-8")
+    assert not hasattr(export_refs, "check_no_internals_visible_to")
+    assert "InternalsVisibleTo puts internal" not in source
+
+
 # HT slice 1: `[return: NotNullIfNotNull(...)]` on an internal type failed the export; keywords inside string
 # literals and comments are not statements either.
 LOGIC_MATCH = ["return x;", "\treturn;", "return cond ? a : b;", "if (x) throw null;", "foreach (var i in xs)",
@@ -934,13 +1180,15 @@ REF_LISTING = """namespace App.Core
 """
 
 
-def fake_export_dotnet(export_refs, project, monkeypatch, surface=(), pins=(), cpm="", ac=(), listing=REF_LISTING):
-    """export_refs.main() in `project` with every dotnet call answered here; returns the recorded calls."""
+def fake_export_dotnet(export_refs, project, monkeypatch, surface=(), pins=(), cpm="", ac=(), listing=REF_LISTING,
+                       ac_name="App.AcceptanceTests", dll="ReferenceAssemblyAttribute", missing_ref=None):
+    """export_refs.main() in `project` with every dotnet call answered here; returns the recorded calls.
+    `missing_ref`: a project file name whose reference assembly does not exist."""
     monkeypatch.setattr(export_refs, "ROOT", None)
     monkeypatch.setattr(export_refs.aclib, "root", lambda _: project)
     monkeypatch.chdir(project)
     ref = project / "obj/Debug/ref/App.Core.dll"
-    write(ref, "ReferenceAssemblyAttribute")
+    write(ref, dll)
     calls = []
 
     def run(*args):
@@ -950,10 +1198,14 @@ def fake_export_dotnet(export_refs, project, monkeypatch, surface=(), pins=(), c
             return json.dumps({"Properties": {"ManagePackageVersionsCentrally": cpm},
                                "Items": {"PackageReference": list(surface), "PackageVersion": list(pins)}})
         if args[1] == "msbuild" and "-p:AcRefMode=true" in queries:
-            return json.dumps({"Items": {"PackageReference": [{"Identity": i} for i in ac]}})
+            assert "-getProperty:AssemblyName" in queries
+            return json.dumps({"Properties": {"AssemblyName": ac_name},
+                               "Items": {"PackageReference": [{"Identity": i} for i in ac]}})
         if args[1] == "msbuild" and "-getItem:ProjectReference" in queries:
             return json.dumps({"Items": {"ProjectReference": []}})
         if args[1] == "msbuild" and "-getProperty:TargetRefPath" in queries:
+            if missing_ref and str(args[2]).endswith(missing_ref):
+                return json.dumps({"Properties": {"TargetRefPath": str(project / "obj/none/ref/X.dll")}})
             return json.dumps({"Properties": {"TargetRefPath": str(ref), "AssemblyName": "App.Core"}})
         if args[1] == "build":
             return ""
@@ -987,7 +1239,7 @@ def test_check_packages_stops_before_any_build_or_delete(export_refs, project, m
     assert "then run the command again" in message
     assert not [c for c in calls if c[1] == "build"] and keep.is_file()
     ac_calls = [c for c in calls if c[2] == ac]
-    assert len(ac_calls) == 1 and "-p:AcRefMode=true" in ac_calls[0]
+    assert len(ac_calls) == 1 and "-p:AcRefMode=true" in ac_calls[0] and "-getProperty:AssemblyName" in ac_calls[0]
 
 
 @pytest.mark.parametrize("variant", ["props file", "property"])
@@ -1020,28 +1272,117 @@ def test_main_runs_to_the_end_without_drift(export_refs, project, monkeypatch):
     with pytest.raises(SystemExit) as error:
         export_refs.main()
     assert "listing contains logic" in str(error.value.code)
+    assert not (project / "artifacts/refs").exists()  # S13-R07: no DLL a check rejected stays
     assert '  return "x"; // y' in str(error.value.code).splitlines()
 
 
-def test_internals_visible_to_found_in_folders_named_like_build_output(export_refs, tmp_path, monkeypatch):
-    """Copilot on HT PR 16: Bindings/ or objectives/ are source folders; only bin/, obj/, obj-ref/ … are skipped."""
-    monkeypatch.setattr(export_refs, "ROOT", tmp_path)
-    project = tmp_path / "src/Core/Core.csproj"
-    for rel, text in [("src/Core/Core.csproj", "<Project />"), ("src/Core/obj-ref/Gen.cs", "InternalsVisibleTo"),
-                      ("src/Core/bin/Debug/Gen.cs", "InternalsVisibleTo")]:
-        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / rel).write_text(text, encoding="utf-8")
-    export_refs.check_no_internals_visible_to(project)  # build output only: passes
-    for folder in ("Bindings", "objectives"):
-        (tmp_path / f"src/Core/{folder}").mkdir()
-        (tmp_path / f"src/Core/{folder}/Friends.cs").write_text('[assembly: InternalsVisibleTo("T")]', encoding="utf-8")
-        with pytest.raises(SystemExit, match=f"src/Core/{folder}/Friends.cs"):
-            export_refs.check_no_internals_visible_to(project)
-        (tmp_path / f"src/Core/{folder}/Friends.cs").unlink()
-    # Copilot on HT PR 16: Windows file names keep their case (Steps.CS)
-    (tmp_path / "src/Core/Friends.CS").write_text('[assembly: InternalsVisibleTo("T")]', encoding="utf-8")
-    with pytest.raises(SystemExit, match="src/Core/Friends.CS"):
-        export_refs.check_no_internals_visible_to(project)
+AC_DRIFT_FREE = ["Microsoft.EntityFrameworkCore.SqlServer", "Microsoft.Extensions.DependencyInjection.Abstractions"]
+INTERNAL_LISTING = ('[assembly: InternalsVisibleTo("App.Core.Tests")]\n'
+                    + REF_LISTING.replace("\tpublic class Api\n\t{\n",
+                                          "\tpublic class Api\n\t{\n\t\tinternal int Seed;\n\n"
+                                          "\t\tinternal void Hidden()\n\t\t{\n\t\t\tthrow null;\n\t\t}\n\n"))
+
+
+def export_fails(export_refs, project, monkeypatch, **kwargs):
+    """main() with the fake; returns the FAIL message, after checking that the refs folder is gone."""
+    fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS, ac=AC_DRIFT_FREE, **kwargs)
+    with pytest.raises(SystemExit) as error:
+        export_refs.main()
+    assert not (project / "artifacts/refs").exists()
+    return str(error.value.code)
+
+
+def test_main_strips_internal_members_and_friend_lines(export_refs, project, monkeypatch):
+    fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS, ac=AC_DRIFT_FREE,
+                       listing=INTERNAL_LISTING, dll="ReferenceAssemblyAttribute InternalsVisibleToAttribute")
+    export_refs.main()
+    api = (project / "artifacts/refs/api/App.Core.cs").read_text(encoding="utf-8")
+    assert "public string? Name(string? x)" in api and "[return: NotNull]" in api
+    assert "Seed" not in api and "Hidden" not in api and "InternalsVisibleTo" not in api
+
+
+@pytest.mark.parametrize("friend", ["App.AcceptanceTests", "app.acceptancetests", "App.AcceptanceTests, PublicKey=00"])
+def test_main_fails_when_a_friend_is_the_ac_assembly(export_refs, project, monkeypatch, friend):
+    message = export_fails(export_refs, project, monkeypatch,
+                           listing=f'[assembly: InternalsVisibleTo("{friend}")]\n' + REF_LISTING,
+                           dll="ReferenceAssemblyAttribute InternalsVisibleToAttribute")
+    assert message.startswith("FAIL: App.Core.dll grants InternalsVisibleTo to the AC assembly App.AcceptanceTests;")
+    assert "Remove that friend from src/App.Core/App.Core.csproj" in message
+
+
+def test_main_accepts_a_friend_that_only_starts_with_the_ac_name(export_refs, project, monkeypatch):
+    fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS, ac=AC_DRIFT_FREE,
+                       listing='[assembly: InternalsVisibleTo("App.AcceptanceTests.Extra")]\n' + REF_LISTING,
+                       dll="ReferenceAssemblyAttribute InternalsVisibleToAttribute")
+    export_refs.main()
+    assert (project / "artifacts/refs/api/App.Core.cs").is_file()
+
+
+def test_main_fails_on_an_unreadable_friend_line(export_refs, project, monkeypatch):
+    line = '[assembly: InternalsVisibleTo("A", AllInternalsVisible = true)]'
+    message = export_fails(export_refs, project, monkeypatch, listing=line + "\n" + REF_LISTING)
+    assert message.startswith("FAIL: cannot read a friend assembly line in the App.Core.dll listing:")
+    assert f"  {line}" in message.splitlines()
+
+
+def test_main_fails_when_the_dll_names_the_attribute_but_the_listing_shows_no_friend(export_refs, project, monkeypatch):
+    message = export_fails(export_refs, project, monkeypatch,
+                           dll="ReferenceAssemblyAttribute InternalsVisibleToAttribute")
+    assert message.startswith("FAIL: App.Core.dll names InternalsVisibleToAttribute, but its listing shows no friend line")
+
+
+def test_main_fails_when_a_hidden_word_is_left(export_refs, project, monkeypatch):
+    left = "\t\tpublic int P { get; internal set; } // x"
+    message = export_fails(export_refs, project, monkeypatch,
+                           listing=REF_LISTING.replace("\tpublic class Api\n\t{\n", f"\tpublic class Api\n\t{{\n{left}\n"))
+    assert message.startswith("FAIL: the App.Core.dll listing still declares non-public members or types:")
+    assert f"  {left.strip()}" in message.splitlines()
+
+
+def test_main_removes_refs_after_a_copy_failure(export_refs, project, monkeypatch):
+    second = project / "src/App.Two/App.Two.csproj"
+    monkeypatch.setattr(export_refs, "with_dependencies",
+                        lambda projects: [project / "src/App.Core/App.Core.csproj", second])
+    message = export_fails(export_refs, project, monkeypatch, missing_ref="App.Two.csproj")
+    assert message.startswith("FAIL: no reference assembly for App.Two.csproj")
+
+
+def test_main_removes_refs_after_an_unexpected_error(export_refs, project, monkeypatch):
+    fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS, ac=AC_DRIFT_FREE)
+
+    def broken(listing):
+        assert (project / "artifacts/refs/App.Core.dll").is_file()
+        raise ValueError("boom")
+    monkeypatch.setattr(export_refs, "logic_lines", broken)
+    with pytest.raises(ValueError, match="boom"):
+        export_refs.main()
+    assert not (project / "artifacts/refs").exists()
+
+
+def test_main_reports_a_refs_folder_it_cannot_remove(export_refs, project, monkeypatch):
+    real = shutil.rmtree
+
+    def locked(path, ignore_errors=False, **kwargs):
+        if ignore_errors:
+            return real(path, ignore_errors=True)
+        raise OSError("locked")
+    fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS, ac=AC_DRIFT_FREE,
+                       dll="ReferenceAssemblyAttribute InternalsVisibleToAttribute")
+    monkeypatch.setattr(export_refs.shutil, "rmtree", locked)
+    with pytest.raises(SystemExit) as error:
+        export_refs.main()
+    lines = str(error.value.code).splitlines()
+    assert lines[0].startswith("FAIL: App.Core.dll names InternalsVisibleToAttribute")
+    assert lines[-1] == "Also: could not remove artifacts/refs (locked); delete it before the ref-mode build."
+
+
+def test_main_needs_the_ac_assembly_name(export_refs, project, monkeypatch):
+    calls = fake_export_dotnet(export_refs, project, monkeypatch, surface=SURFACE_ITEMS, ac=AC_DRIFT_FREE,
+                               ac_name=" ")
+    with pytest.raises(SystemExit) as error:
+        export_refs.main()
+    assert str(error.value.code) == f"FAIL: cannot read the AssemblyName of {CONFIG['acProject']} (ref mode)"
+    assert not [c for c in calls if c[1] == "build"]
 
 
 def test_export_refs_needs_config(project):

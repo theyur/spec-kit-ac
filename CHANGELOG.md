@@ -20,12 +20,27 @@ version and an `## [Unreleased]` section until the next release.
   Grep the reference DLLs beside them, which confirmed guessed type names (#17).
 - `speckit-ac doctor` advises `speckit-ac upgrade` for a missing `.gitignore` / `.gitattributes` block. Re-running
   `/speckit-ac-init` only verifies, so the old advice did not help.
+- `export_refs.py` no longer fails on members that reference assemblies keep even without `InternalsVisibleTo`:
+  `internal virtual` and `internal abstract` members, internal members of a public interface, and a public
+  struct's `internal` and `private` fields. The listing drops them.
 
 ### Changed
 
 - `speckit-ac upgrade` refreshes the managed blocks in `.gitignore` and `.gitattributes` when
   `.workflow/config.json` exists. Only the text between the markers changes. `doctor` warns when a block is out of
   date.
+- An AC surface project may use `InternalsVisibleTo` for its own unit tests (#15). `/speckit-ac-init` shows it as
+  information instead of stopping. `export_refs.py`:
+  - writes into the API listing only the members that code outside the assembly can use (public, protected,
+    protected internal). Internal, private and private protected members and accessors go, with their
+    attributes and bodies, and so do the `[assembly: InternalsVisibleTo(...)]` lines;
+  - fails when a friend assembly is the AC project's own assembly (its `AssemblyName`, any case, any public key);
+  - fails when anything hidden is still left after the filter, or when the friend lines can't be read;
+  - removes the refs folder after any failure once it has started, so no unchecked DLL is left for the ref-mode
+    build.
+
+  The testability text that init offers for the constitution now reads "`InternalsVisibleTo` never names the AC
+  assembly".
 
 ### Known limits of the path cleaning
 
@@ -37,6 +52,18 @@ version and an `## [Unreleased]` section until the next release.
   a drive path glued to a word (`dirC:\…`).
 - JSON-escaped UNC paths (`\\\\server\\share`) and long-path UNC forms (`\\?\UNC\…`) are not recognised.
 - A sibling folder whose name is the root plus a space (`repo 2`) gives `. 2\…`.
+
+### Known limits of the API listing
+
+- With `InternalsVisibleTo`, internal member names (no bodies) stay in the reference DLLs. Only the compiler
+  reads those; the writer and the judge cannot. A guessed internal name gives CS0122 rather than CS0117, which
+  tells the writer that the name exists. The same was already true of internal types.
+- A public type that implements an internal interface still names it, in its base list and in its explicit
+  implementations (`void IInner.M()`). That holds with or without `InternalsVisibleTo`.
+- A DLL that mentions `InternalsVisibleToAttribute` without granting any friend fails the export with "shows no
+  friend line". This happens, for example, when a public API uses the attribute type. The check is a byte
+  search, not a metadata read, so it fails closed rather than trusting a listing that may have lost its friend
+  lines.
 
 ### Upgrade
 
