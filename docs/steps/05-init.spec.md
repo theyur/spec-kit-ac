@@ -93,7 +93,8 @@ new session with `/speckit-ac-init smoke`. Out of scope: deploy (agents, guard r
     `ManagePackageVersionsCentrally`).
   - **Root `Directory.Build.props`:** whether it exists, and its `TreatWarningsAsErrors` value.
   - **Proposals:**
-    - AC-surface candidates: the non-test projects that are not executables.
+    - AC-surface candidates: the non-test projects that are not executables. (Step 14: `Exe` projects
+      are listed as `hostProjects` and may be chosen by hand.)
     - `unitTestProjects`: the test projects.
     - `testFramework`: the framework the test projects share. A mix of frameworks, or none, means
       the user is asked.

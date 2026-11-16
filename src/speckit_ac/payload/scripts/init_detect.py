@@ -4,7 +4,8 @@ Usage: init_detect.py [--solution App.slnx] [--framework xunit3]
 Prints: the v1.0 environment problems, the solution(s), each C# project of the solution (evaluated with
 `dotnet msbuild -getProperty/-getItem`, so root props and central package management count), the test runner
 (global.json), central package management, the root Directory.Build.props, the implementation folders (never spec
-inputs), proposals for every config value, whether the (framework, runner) pair is supported, and blockers.
+inputs), proposals for every config value (libraries as the AC surface; `Exe` projects as hostProjects, which the user
+may choose by hand), whether the (framework, runner) pair is supported, and blockers.
 --framework re-checks `supported` for the framework the user chose.
 """
 import argparse
@@ -219,6 +220,8 @@ def highest_runnable(tfms) -> str | None:
 def propose(root: Path, solution: str | None, projects: list[dict]) -> dict:
     tests = [p for p in projects if p["isTestProject"]]
     candidates = [p for p in projects if not p["isTestProject"] and p["outputType"].lower() == "library"]
+    # Hosts are never proposed: the user may choose one by hand when the product is one host project (step 14).
+    hosts = [p for p in projects if not p["isTestProject"] and p["outputType"].lower() == "exe"]
     frameworks = sorted({f for p in tests for f in p["frameworks"]})
     framework = frameworks[0] if len(frameworks) == 1 else None
     framework_reason = None if framework else ("mixed test frameworks: " + ", ".join(frameworks) if frameworks
@@ -243,6 +246,7 @@ def propose(root: Path, solution: str | None, projects: list[dict]) -> dict:
                           "AC test project should target")
     return {
         "acSurfaceProjects": [p["path"] for p in candidates],
+        "hostProjects": [p["path"] for p in hosts],
         "unitTestProjects": [p["path"] for p in tests],
         "testFramework": framework,
         "testFrameworkReason": framework_reason,

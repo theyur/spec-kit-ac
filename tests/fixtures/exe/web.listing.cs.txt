@@ -1,0 +1,45 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
+using Microsoft.AspNetCore.Routing;
+
+[assembly: CompilationRelaxations(8)]
+[assembly: RuntimeCompatibility(WrapNonExceptionThrows = true)]
+[assembly: Debuggable(DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints)]
+[assembly: ReferenceAssembly]
+[assembly: TargetFramework(".NETCoreApp,Version=v11.0", FrameworkDisplayName = ".NET 11.0")]
+[assembly: AssemblyCompany("Svc.Web")]
+[assembly: AssemblyConfiguration("Release")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyProduct("Svc.Web")]
+[assembly: AssemblyTitle("Svc.Web")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[module: RefSafetyRules(11)]
+public class Program
+{
+	private static void Main(string[] args)
+	{
+		throw null;
+	}
+
+	public Program()
+	{
+		throw null;
+	}
+}
+namespace Svc.Web;
+
+public static class Greeting
+{
+	public static string Hello(string name)
+	{
+		throw null;
+	}
+
+	public static IEndpointRouteBuilder MapGreeting(this IEndpointRouteBuilder routes)
+	{
+		throw null;
+	}
+}

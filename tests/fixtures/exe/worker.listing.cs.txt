@@ -1,0 +1,96 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+[assembly: CompilationRelaxations(8)]
+[assembly: RuntimeCompatibility(WrapNonExceptionThrows = true)]
+[assembly: Debuggable(DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints)]
+[assembly: ReferenceAssembly]
+[assembly: TargetFramework(".NETCoreApp,Version=v11.0", FrameworkDisplayName = ".NET 11.0")]
+[assembly: AssemblyCompany("Svc.Worker")]
+[assembly: AssemblyConfiguration("Release")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyProduct("Svc.Worker")]
+[assembly: AssemblyTitle("Svc.Worker")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[module: RefSafetyRules(11)]
+[CompilerGenerated]
+internal class Program
+{
+	private static void Main(string[] args)
+	{
+		throw null;
+	}
+
+	public Program()
+	{
+		throw null;
+	}
+}
+namespace Svc.Worker;
+
+public static class Pricing
+{
+	public static long ToCents(decimal amount)
+	{
+		throw null;
+	}
+}
+public class Worker : BackgroundService
+{
+	[StructLayout(LayoutKind.Auto)]
+	[CompilerGenerated]
+	private struct <ExecuteAsync>d__2 : IAsyncStateMachine
+	{
+		public int <>1__state;
+
+		public AsyncTaskMethodBuilder <>t__builder;
+
+		public Worker <>4__this;
+
+		public CancellationToken stoppingToken;
+
+		private TaskAwaiter <>u__1;
+
+		private void MoveNext()
+		{
+			throw null;
+		}
+
+		void IAsyncStateMachine.MoveNext()
+		{
+			//ILSpy generated this explicit interface implementation from .override directive in MoveNext
+			this.MoveNext();
+		}
+
+		[DebuggerHidden]
+		private void SetStateMachine(IAsyncStateMachine stateMachine)
+		{
+			throw null;
+		}
+
+		void IAsyncStateMachine.SetStateMachine(IAsyncStateMachine stateMachine)
+		{
+			//ILSpy generated this explicit interface implementation from .override directive in SetStateMachine
+			this.SetStateMachine(stateMachine);
+		}
+	}
+
+	public Worker(ILogger<Worker> logger)
+	{
+		throw null;
+	}
+
+	[AsyncStateMachine(typeof(<ExecuteAsync>d__2))]
+	protected override Task ExecuteAsync(CancellationToken stoppingToken)
+	{
+		throw null;
+	}
+}

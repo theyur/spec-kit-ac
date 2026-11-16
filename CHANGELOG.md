@@ -23,6 +23,8 @@ version and an `## [Unreleased]` section until the next release.
 - `export_refs.py` no longer fails on members that reference assemblies keep even without `InternalsVisibleTo`:
   `internal virtual` and `internal abstract` members, internal members of a public interface, and a public
   struct's `internal` and `private` fields. The listing drops them.
+- `/speckit-ac-init` copies the implicit `Microsoft.AspNetCore.App` framework reference of a Web SDK surface into the
+  AC project. Before, the writer's ref-mode build failed with CS0012 as soon as a step used an ASP.NET Core type.
 
 ### Changed
 
@@ -41,6 +43,12 @@ version and an `## [Unreleased]` section until the next release.
 
   The testability text that init offers for the constitution now reads "`InternalsVisibleTo` never names the AC
   assembly".
+- An `Exe` project (a worker service, a web API) may be the AC surface, chosen by hand, for a product that is one
+  host project (#16). `/speckit-ac-init` still proposes only libraries:
+  - detection lists the `Exe` projects as `hostProjects`;
+  - with no library it always asks which host to use, and with neither it stops;
+  - the summary marks a chosen host as "host (`Exe`)";
+  - it asks for the target framework again when the chosen projects need a higher one than proposed.
 
 ### Known limits of the path cleaning
 
@@ -65,9 +73,18 @@ version and an `## [Unreleased]` section until the next release.
   search, not a metadata read, so it fails closed rather than trusting a listing that may have lost its friend
   lines.
 
+### Known limits of an `Exe` surface
+
+- `WinExe` projects (WPF, WinForms) are not offered; they need a `-windows` target framework in the AC project.
+- In normal mode the AC project's output also gets the host's `appsettings*.json`, so a test that builds the host
+  reads the product's configuration.
+
 ### Upgrade
 
 - Run `speckit-ac upgrade` in existing installs. It adds the TRX line to the `.gitignore` block.
+- Init writes the AC project once, so an existing AC project with a Web SDK surface does not get the framework
+  reference: add `<FrameworkReference Include="Microsoft.AspNetCore.App" />` to it by hand if its steps need ASP.NET
+  Core types.
   - It stops before any change, and names the file, when `.gitignore` or `.gitattributes` is not UTF-8 or holds
     a broken block.
 - Untrack TRX files that are already committed with `git rm --cached -- "specs/*/ac-results.trx"`, then commit.
