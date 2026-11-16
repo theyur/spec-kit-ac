@@ -121,7 +121,8 @@ def evaluate(root: Path, project: str, runner=run) -> dict:
 
 
 def internals_visible_to(root: Path, project: str) -> list[str]:
-    """Files of the project (and root props/targets) that mention InternalsVisibleTo (same search as export_refs)."""
+    """Files of the project (and root props/targets) that mention InternalsVisibleTo: information for the init
+    summary. export_refs checks the friends themselves (none may be the AC assembly)."""
     folder = (root / project).parent
     files = [f for f in folder.rglob("*") if f.is_file() and f.suffix.lower() in SOURCE_SUFFIXES
              and not any(BUILD_FOLDER.match(s) for s in f.relative_to(folder).parts[:-1])]
@@ -261,17 +262,13 @@ def supported(framework: str | None, runner: str) -> dict:
     return {"pair": f"{framework}/{runner}", "supported": ok, "reason": reason, "supportedPairs": pairs}
 
 
-def blockers(root: Path, proposal: dict, projects: list[dict]) -> list[str]:
+def blockers(root: Path, proposal: dict) -> list[str]:
     out = []
     if (root / aclib.CONFIG).exists():
         out.append(f"{aclib.CONFIG} exists: the project is initialised (verify mode)")
     ac = root / proposal["acProjectDir"]
     if ac.exists() and any(ac.iterdir()):
         out.append(f"{proposal['acProjectDir']} exists and is not empty")
-    for p in projects:
-        if p["path"] in proposal["acSurfaceProjects"] and p["internalsVisibleTo"]:
-            out.append(f"surface candidate {p['path']} uses InternalsVisibleTo ({', '.join(p['internalsVisibleTo'])}); "
-                       "remove it, or leave the project out of the AC surface")
     return out
 
 
@@ -303,7 +300,7 @@ def detect(root: Path, solution: str | None, framework: str | None, runner=run) 
         "implementationFolders": init_config.implementation_folders(root),
         "proposal": proposal,
         "supported": supported(chosen, test_runner),
-        "blockers": blockers(root, proposal, projects) if proposal else [],
+        "blockers": blockers(root, proposal) if proposal else [],
     }
 
 

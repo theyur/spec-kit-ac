@@ -1,0 +1,26 @@
+// Probe for step 13 (ilspycmd 11.2.0.10050, .NET SDK 11.0.100). The csproj:
+// <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ProduceReferenceAssembly>true</ProduceReferenceAssembly></PropertyGroup>
+// <ItemGroup><InternalsVisibleTo Include="Lib.UnitTests" /></ItemGroup>
+
+using System;
+namespace Lib;
+public abstract class Base
+{
+    public abstract int P1 { get; internal set; }
+    internal abstract int P2 { get; }
+    public abstract int P3 { get; set; }
+    protected internal abstract int P4 { get; private protected set; }
+    internal abstract int this[int i] { get; }
+    public abstract event EventHandler E1;
+    internal abstract event EventHandler E2;
+    public int Auto { get; internal set; }
+}
+public interface IThing
+{
+    int Q1 { get; }
+    internal int Q2 { get; }
+    int Q3 { get => 1; }
+    internal int Q4 => 2;
+    event EventHandler E3;
+}
+public class Ext { public static extern int X { get; } }

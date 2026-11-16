@@ -160,6 +160,19 @@ def test_internals_visible_to_reads_any_encoding(detect, tmp_path):
     assert detect.internals_visible_to(tmp_path, "src/A/A.csproj") == ["src/A/Info.cs"]
 
 
+def test_internals_visible_to_folders_and_extension_case(detect, tmp_path):
+    """Copilot on HT PR 16 (moved from the removed export scan in step 13): Bindings/ and objectives/ are source
+    folders, only bin/, obj/, obj-ref/ … are skipped; Windows file names keep their case (Friends.CS)."""
+    write(tmp_path / "src/Core/Core.csproj", "<Project />\n")
+    for rel in ("src/Core/obj-ref/Gen.cs", "src/Core/bin/Debug/Gen.cs"):
+        write(tmp_path / rel, "InternalsVisibleTo")
+    assert detect.internals_visible_to(tmp_path, "src/Core/Core.csproj") == []
+    for rel in ("src/Core/Bindings/Friends.cs", "src/Core/objectives/Friends.cs", "src/Core/Friends.CS"):
+        write(tmp_path / rel, '[assembly: InternalsVisibleTo("T")]')
+    assert detect.internals_visible_to(tmp_path, "src/Core/Core.csproj") == [
+        "src/Core/Bindings/Friends.cs", "src/Core/Friends.CS", "src/Core/objectives/Friends.cs"]
+
+
 # ---- init_detect: real msbuild evaluation --------------------------------------------------------------------------
 
 def detect_json(project, *args):
@@ -211,11 +224,15 @@ def test_detect_blockers(tmp_path):
     write(project / "src/App.Core/Friends.cs", "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"X\")]\n")
     write(project / "tests/App.AcceptanceTests/old.txt")
     write(project / ".workflow/config.json", "{}")
-    blockers = detect_json(project)["blockers"]
-    assert len(blockers) == 3
+    found = detect_json(project)
+    blockers = found["blockers"]
+    assert len(blockers) == 2
     assert any("config.json exists" in b for b in blockers)
     assert any("tests/App.AcceptanceTests exists and is not empty" in b for b in blockers)
-    assert any("src/App.Core/App.Core.csproj uses InternalsVisibleTo (src/App.Core/Friends.cs)" in b for b in blockers)
+    # S13-R08: InternalsVisibleTo is information, not a blocker (the export checks the friends)
+    assert not any("InternalsVisibleTo" in b for b in blockers)
+    core = next(p for p in found["projects"] if p["path"] == "src/App.Core/App.Core.csproj")
+    assert core["internalsVisibleTo"] == ["src/App.Core/Friends.cs"]
 
 
 @needs_dotnet

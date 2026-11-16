@@ -1,0 +1,330 @@
+using System;
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
+using System.Text;
+
+[assembly: CompilationRelaxations(8)]
+[assembly: RuntimeCompatibility(WrapNonExceptionThrows = true)]
+[assembly: Debuggable(DebuggableAttribute.DebuggingModes.Default | DebuggableAttribute.DebuggingModes.DisableOptimizations | DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints | DebuggableAttribute.DebuggingModes.EnableEditAndContinue)]
+[assembly: ReferenceAssembly]
+[assembly: InternalsVisibleTo("Lib.Component, PublicKey=0024000004800000940000000602000000240000525341310004000001000100c547cac37abd99c8db225ef2f6c8a3602f3b3606cc9891605d02baa56104f4cfc0734aa39b93bf7852f7d9266654753cc297e7d2edfe0bac1cdcf9f717241550e0a7b191195b7667bb4f64bcb8e2121380fd1d9d46ad2d92d2d15605093924cceaf74c4861eff62abf69b9291ed0a340e113be11e6a7d3113e92484cf7045cc7")]
+[assembly: TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
+[assembly: AssemblyCompany("Lib")]
+[assembly: AssemblyConfiguration("Debug")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyProduct("Lib")]
+[assembly: AssemblyTitle("Lib")]
+[assembly: InternalsVisibleTo("Lib.UnitTests")]
+[assembly: InternalsVisibleTo("Lib.Other, PublicKey=0024000004800000940000000602000000240000525341310004000001000100c547cac37abd99c8db225ef2f6c8a3602f3b3606cc9891605d02baa56104f4cfc0734aa39b93bf7852f7d9266654753cc297e7d2edfe0bac1cdcf9f717241550e0a7b191195b7667bb4f64bcb8e2121380fd1d9d46ad2d92d2d15605093924cceaf74c4861eff62abf69b9291ed0a340e113be11e6a7d3113e92484cf7045cc7")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[module: RefSafetyRules(11)]
+namespace Lib;
+
+public class Api
+{
+	public class Nested
+	{
+		public int X
+		{
+			[CompilerGenerated]
+			get
+			{
+				throw null;
+			}
+			[CompilerGenerated]
+			internal init
+			{
+				throw null;
+			}
+		}
+
+		internal Nested()
+		{
+			throw null;
+		}
+	}
+
+	internal class InNested
+	{
+		public void Y()
+		{
+			throw null;
+		}
+
+		public InNested()
+		{
+			throw null;
+		}
+	}
+
+	internal int Field;
+
+	internal const int Max = 5;
+
+	internal static readonly string Ro;
+
+	internal Nested? N;
+
+	internal int Seed
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+	}
+
+	public int Count
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+		[CompilerGenerated]
+		internal set
+		{
+			throw null;
+		}
+	}
+
+	public string Name
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+		[CompilerGenerated]
+		private protected set
+		{
+			throw null;
+		}
+	}
+
+	internal int this[int i]
+	{
+		get
+		{
+			throw null;
+		}
+	}
+
+	internal int Expr
+	{
+		get
+		{
+			throw null;
+		}
+	}
+
+	internal string? Multi
+	{
+		get
+		{
+			throw null;
+		}
+		set
+		{
+			throw null;
+		}
+	}
+
+	protected internal int PiProp
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+		[CompilerGenerated]
+		internal set
+		{
+			throw null;
+		}
+	}
+
+	internal event EventHandler? Changed
+	{
+		[CompilerGenerated]
+		add
+		{
+			throw null;
+		}
+		[CompilerGenerated]
+		remove
+		{
+			throw null;
+		}
+	}
+
+	internal Api(int seed)
+	{
+		throw null;
+	}
+
+	public Api()
+	{
+		throw null;
+	}
+
+	[Obsolete("old")]
+	internal void Old()
+	{
+		throw null;
+	}
+
+	private protected void Pp()
+	{
+		throw null;
+	}
+
+	protected internal void Pi()
+	{
+		throw null;
+	}
+
+	internal virtual void V()
+	{
+		throw null;
+	}
+
+	internal T Gen<T>(T x) where T : class
+	{
+		throw null;
+	}
+
+	public void Run()
+	{
+		throw null;
+	}
+}
+public interface IThing
+{
+	internal void Hidden()
+	{
+		throw null;
+	}
+
+	void Shown();
+}
+public abstract class Base
+{
+	internal abstract void A();
+
+	public abstract void B();
+
+	protected Base()
+	{
+		throw null;
+	}
+}
+public struct S
+{
+	internal int F;
+
+	public int G;
+
+	private int H;
+
+	internal S(int f)
+	{
+		throw null;
+	}
+}
+public record R
+{
+	[CompilerGenerated]
+	protected virtual Type EqualityContract
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+	}
+
+	public int A
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+		[CompilerGenerated]
+		init
+		{
+			throw null;
+		}
+	}
+
+	internal int B
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+		[CompilerGenerated]
+		init
+		{
+			throw null;
+		}
+	}
+
+	public R(int A)
+	{
+		throw null;
+	}
+
+	[CompilerGenerated]
+	public override string ToString()
+	{
+		throw null;
+	}
+
+	[CompilerGenerated]
+	protected virtual bool PrintMembers(StringBuilder builder)
+	{
+		throw null;
+	}
+
+	[CompilerGenerated]
+	public override int GetHashCode()
+	{
+		throw null;
+	}
+
+	[CompilerGenerated]
+	public virtual bool Equals(R? other)
+	{
+		throw null;
+	}
+
+	[CompilerGenerated]
+	protected R(R original)
+	{
+		throw null;
+	}
+
+	[CompilerGenerated]
+	public void Deconstruct(out int A)
+	{
+		throw null;
+	}
+}
+internal class Impl
+{
+	public Impl()
+	{
+		throw null;
+	}
+}
+public enum E
+{
+	A,
+	B
+}

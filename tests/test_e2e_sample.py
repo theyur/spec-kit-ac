@@ -104,6 +104,12 @@ def test_sample_discriminates(tmp_path):
     script(project, "init_scaffold.py", "--target-framework", proposal["targetFramework"])
     verify = script(project, "init_verify.py")
     assert "FAIL" not in verify, verify
+    # S13-A05 (#15): Shop.Pricing has InternalsVisibleTo for its unit tests; the real listing shows neither the
+    # internal member nor the friend line.
+    cfg = e2elib.load_config(project)
+    api = (project / cfg["refsDir"] / "api" / "Shop.Pricing.cs").read_text(encoding="utf-8")
+    assert "ToCents" in api and "Decimals" not in api and "InternalsVisibleTo" not in api, api
+    assert not re.search(r"^\s*(internal|private)\b", api, re.MULTILINE), api
     stage.apply(project, "commit", "init")
     assert check(project, "init") == 0
     cfg = e2elib.load_config(project)

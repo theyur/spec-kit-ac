@@ -1,0 +1,90 @@
+using System;
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
+
+[assembly: CompilationRelaxations(8)]
+[assembly: RuntimeCompatibility(WrapNonExceptionThrows = true)]
+[assembly: Debuggable(DebuggableAttribute.DebuggingModes.Default | DebuggableAttribute.DebuggingModes.DisableOptimizations | DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints | DebuggableAttribute.DebuggingModes.EnableEditAndContinue)]
+[assembly: ReferenceAssembly]
+[assembly: TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
+[assembly: AssemblyCompany("Lib")]
+[assembly: AssemblyConfiguration("Debug")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyProduct("Lib")]
+[assembly: AssemblyTitle("Lib")]
+[assembly: InternalsVisibleTo("Lib.UnitTests")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[module: RefSafetyRules(11)]
+namespace Lib;
+
+public abstract class Base
+{
+	public abstract int P1 { get; internal set; }
+
+	internal abstract int P2 { get; }
+
+	public abstract int P3 { get; set; }
+
+	protected internal abstract int P4 { get; private protected set; }
+
+	internal abstract int this[int i] { get; }
+
+	public int Auto
+	{
+		[CompilerGenerated]
+		get
+		{
+			throw null;
+		}
+		[CompilerGenerated]
+		internal set
+		{
+			throw null;
+		}
+	}
+
+	public abstract event EventHandler E1;
+
+	internal abstract event EventHandler E2;
+
+	protected Base()
+	{
+		throw null;
+	}
+}
+public interface IThing
+{
+	int Q1 { get; }
+
+	internal int Q2 { get; }
+
+	int Q3
+	{
+		get
+		{
+			throw null;
+		}
+	}
+
+	internal int Q4
+	{
+		get
+		{
+			throw null;
+		}
+	}
+
+	event EventHandler E3;
+}
+public class Ext
+{
+	public static extern int X { get; }
+
+	public Ext()
+	{
+		throw null;
+	}
+}
