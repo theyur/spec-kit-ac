@@ -52,7 +52,7 @@ The *Other spec inputs* line is present only when the project lists extra spec d
 | `<STEP_DEFINITIONS_DIR>` | The feature's step definitions |
 | `<SUPPORT_DIR>` | The feature's support code |
 | `<SHARED_SUPPORT_DIR>` | Helpers shared by several features |
-| `<REFS_DIR>` | Reference assemblies and their API listings |
+| `<REFS_DIR>` | Folder of the reference assemblies; you read only the API listings in `<REFS_DIR>/api/` |
 | `<AC_REF_BUILD_COMMAND>` | The one command you may run |
 | `<RUNS_DIR>` | The feature's run records |
 

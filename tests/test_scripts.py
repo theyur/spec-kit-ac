@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -616,6 +617,7 @@ def test_summarize_trx(trx_project):
     assert "| F002 | Only in beta | @F002 @AC-002 | pending |" in md  # no segment, one feature
     assert "## F001/AC-002 Login fails(x) — failed" in md
     assert "LoginSteps.cs:line 12" in md and "Login.cs" not in md and md.count("[non-AC frame(s) hidden]") == 1
+    assert f"in {AC}/StepDefinitions/F001/LoginSteps.cs:line 12" in md  # S12-R06: repo-relative
 
 
 def test_summarize_trx_nunit_test_names(project):
@@ -648,6 +650,113 @@ def test_summarize_trx_current(trx_project):
     assert "## Current feature (F002)" in current and "Only in beta" in current and "Login succeeds" not in current
     assert "Login succeeds" in regression and "### F001/AC-002 Login fails(x) — failed" in regression
     failed(run_script(p, "summarize_trx.py", "ac-results.trx", "x.md", "--current", "beta"), 1, "feature tag")
+
+
+# ---- summarize_trx.py: no absolute local paths (step 12, #18) ------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def summarize_trx():
+    previous, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        spec = importlib.util.spec_from_file_location("summarize_trx", PAYLOAD / "scripts" / "summarize_trx.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+R = r"C:\Work\Repo"
+WT = R + r"\.claude\worktrees\w1"
+P = "/home/u/repo"
+X = "[external path]"
+WIN, POSIX, BOTH = (True,), (False,), (True, False)
+# (input, roots, modes, expected): the S12-R07 table, plus the pinned limit (`First Last` keeps `Last`).
+SCRUB = [
+    (rf" in {R}\tests\App.AcceptanceTests\StepDefinitions\X.cs:line 42", [R], WIN,
+     " in tests/App.AcceptanceTests/StepDefinitions/X.cs:line 42"),
+    (" in c:/work/repo/tests/App.AcceptanceTests/StepDefinitions/X.cs:line 42", [R], WIN,
+     " in tests/App.AcceptanceTests/StepDefinitions/X.cs:line 42"),
+    (r" in C:\w\my repo\tests\X.cs:line 4", [r"C:\w\my repo"], WIN, " in tests/X.cs:line 4"),
+    (rf" in {WT}\tests\X.cs:line 4", [WT], WIN, " in tests/X.cs:line 4"),
+    (rf" in {R}\src\X.cs:line 4", [WT], WIN, f" in {X}:line 4"),
+    (r" in S:\tests\X.cs:line 1", [r"C:\real\repo", "S:\\"], WIN, " in tests/X.cs:line 1"),
+    (f"cwd is {R}", [R], WIN, "cwd is ."),
+    (f"cwd is {R}.", [R], WIN, f"cwd is {X}."),
+    (f"cwd is {R}\\", [R], WIN, "cwd is ."),
+    (rf"{R}\a.cs;{R}\b.cs", [R], WIN, "a.cs;b.cs"),
+    (f"{P}/a.cs,{P}/b.cs", [P], POSIX, "a.cs,b.cs"),
+    (rf" in {R}\tests\My Steps\X.cs:line 4", [R], WIN, " in tests/My Steps/X.cs:line 4"),
+    ("open C:/Users/u/x.json failed", [R], WIN, f"open {X} failed"),
+    (rf"{R}\a.txt C:\Users\u\b.txt", [R], WIN, f"a.txt {X}"),
+    (r"Could not find file 'C:\Users\First Last\AppData\x.json'.", [R], WIN, f"Could not find file '{X}'."),
+    (r"'C:\Users\O'Brien\x.json'", [R], WIN, f"'{X}'"),
+    (r"C:\Users\Anna Maria Rossi\src\x.cs failed", [R], WIN, f"{X} failed"),
+    (r" in C:\Users\u\.nuget\packages\reqnroll\2.0.0\X.cs:line 9", [R], WIN, f" in {X}:line 9"),
+    (r"\\server\share\x.cs", [R], WIN, X),
+    (r'Expected pattern "^\\d+\\.\\d+$"', [R], WIN, r'Expected pattern "^\\d+\\.\\d+$"'),
+    (r"| C:\a b\x.cs | failed |", [R], WIN, f"| {X} | failed |"),
+    (r"in C:\x\y.txt.", [R], WIN, f"in {X}."),
+    (f"{P}/tests/X.cs:line 3", [P], POSIX, "tests/X.cs:line 3"),
+    ("/usr/share/dotnet/sdk/x", [P], POSIX, "/usr/share/dotnet/sdk/x"),
+    ("GET /api/users/42 returned 404, GET /Users/42", [R], BOTH, None),
+    ("see https://example.com/a/b and F001/AC-001", [R], BOTH, None),
+    ("ratio 1:2 and Expected: 5", [R], BOTH, None),
+    ("Expected S: 5", ["S:\\"], WIN, None),
+    (r"HOME is C:\Users\First Last", [R], WIN, f"HOME is {X} Last"),  # documented limit, pinned on purpose
+    ("| F001 | Login fails(x) | @F001 @AC-002 | failed | 00:00:00.02 |", [R], BOTH, None),
+]
+
+
+@pytest.mark.parametrize("text,roots,modes,expected", SCRUB, ids=[row[0][:40] for row in SCRUB])
+def test_scrub_paths(summarize_trx, text, roots, modes, expected):
+    for windows in modes:
+        # POSIX rows run with the POSIX root; "both" rows keep the root, which never occurs in them.
+        assert summarize_trx.scrub_paths(text, roots if windows or roots == [P] else [P], windows) == (
+            text if expected is None else expected), f"windows={windows}"
+
+
+SCRUB_TRX = """<?xml version="1.0" encoding="utf-8"?>
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Results>
+    <UnitTestResult testId="2" testName="Login fails(x)" outcome="Failed" duration="00:00:00.02">
+      <Output>
+        <StdOut>cwd: {root}
+profile C:\\Users\\First Last\\AppData\\y.json failed</StdOut>
+        <ErrorInfo>
+          <Message>Could not find file 'C:\\Users\\First Last\\AppData\\x.json'.</Message>
+          <StackTrace>   at Steps.Then() in {upper}/StepDefinitions/F001/LoginSteps.cs:line 12
+   at Steps.When() in {ac}\\StepDefinitions\\F001\\LoginSteps.cs:line 12
+   at App.Core.Login.Run() in {root}\\src\\App.Core\\Login.cs:line 40</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest id="2"><TestMethod className="App.AcceptanceTests.Features.F001.LoginFeature" name="LoginFails" /></UnitTest>
+  </TestDefinitions>
+</TestRun>
+"""
+
+
+def test_summarize_trx_scrubs_paths(trx_project, tmp_path):
+    """S12-R07 (#18): run from another folder, so a frame cleaned before the AC-frame filter would resolve elsewhere
+    and be hidden. Nothing of the root, the fake profile or any drive / UNC path reaches the committed file."""
+    p = trx_project
+    root = str(p)
+    upper = (root[:-len(p.name)].upper() + p.name).replace("\\", "/") + "/" + AC  # the root part upper-cased
+    write(p / "scrub.trx", SCRUB_TRX.replace("{root}", root).replace("{ac}", str(p / AC)).replace("{upper}", upper))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    ok(run_script(p, "summarize_trx.py", str(p / "scrub.trx"), str(p / "scrub.md"), cwd=elsewhere))
+    md = (p / "scrub.md").read_text(encoding="utf-8")
+    folded = md.lower().replace("\\", "/")
+    assert root.lower().replace("\\", "/") not in folded
+    assert "first last" not in folded and "appdata" not in folded
+    assert re.search(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]|\\\\\w", md) is None, md
+    assert md.count(f"in {AC}/StepDefinitions/F001/LoginSteps.cs:line 12") == 2, md
+    assert "[non-AC frame(s) hidden]" in md and "cwd: ." in md
+    assert f"Could not find file '{X}'." in md and f"profile {X} failed" in md
 
 
 # ---- export_refs.py (pure functions; the dotnet path runs in step 7) --------------------------------------------

@@ -45,6 +45,7 @@ AGENT_FILES = tuple(f"{AGENTS}/{role}.md" for role in ROLES)
 PREEXISTING = (SETTINGS, AGENTS, *AGENT_FILES, EXTENSIONS, EXTENSIONS_YML, REGISTRY, BACKUP)
 MD_BEGIN = "<!-- >>> speckit-ac (managed; do not edit) -->"
 MD_END = "<!-- <<< speckit-ac -->"
+GIT_BLOCKS = (".gitignore", ".gitattributes")  # managed blocks: init writes them, upgrade refreshes, uninstall removes
 # What `specify extension remove` leaves in extensions.yml when no extension is left (specify 1.0.2, CRLF folded).
 EMPTY_EXTENSIONS_YML = "installed: []\nsettings:\n  auto_execute_hooks: true\nhooks: {}\n"
 MIN_SPECIFY = (1, 0, 2)
@@ -422,6 +423,43 @@ def remove_claude_block(root: Path) -> bool:
     return aclib_call(aclib.remove_block, root / "CLAUDE.md", begin=MD_BEGIN, end=MD_END)
 
 
+# ---- .gitignore / .gitattributes blocks (step 12) --------------------------------------------------------------
+
+def git_block_lines(cfg: dict, payload: Path | None = None) -> dict[str, list[str]]:
+    """The managed block lines per file, from the one definition in init_scaffold (the payload's)."""
+    scaffold = payload_module("init_scaffold", payload)
+    return {".gitignore": scaffold.gitignore_lines(cfg), ".gitattributes": scaffold.gitattributes_lines(cfg)}
+
+
+def git_block_problems(root: Path) -> list[str]:
+    """Files whose block upgrade could not rewrite (not UTF-8, a broken block); checked before any change."""
+    if not (root / aclib.CONFIG).is_file():
+        return []
+    problems = []
+    for name in GIT_BLOCKS:
+        try:
+            aclib.block_lines(root / name)
+        except aclib.AcError as error:
+            problems.append(str(error))
+    return problems
+
+
+def write_git_blocks(root: Path, payload: Path | None = None) -> list[str]:
+    """Rewrite the .gitignore / .gitattributes blocks from the config (upgrade); [] without a config.
+    Returns the names of the files that changed."""
+    if not (root / aclib.CONFIG).is_file():
+        return []
+    cfg = aclib.validate_config(read_json(root / aclib.CONFIG))
+    changed = []
+    for name, lines in git_block_lines(cfg, payload).items():
+        try:
+            if aclib.write_block(root / name, lines):
+                changed.append(name)
+        except (aclib.AcError, UnicodeError, OSError) as error:
+            raise DeployError(f"{name}: {error}") from None
+    return changed
+
+
 # ---- guard registration (R10, R11) ----------------------------------------------------------------------------
 
 def guard_group() -> dict:
@@ -752,7 +790,7 @@ def uninstall(root: Path, host: Host | None = None) -> int:
     warnings += [f"{rel} was changed after install, so it is kept" for rel in kept]
     if remove_claude_block(root):
         say("CLAUDE.md: speckit-ac block removed.")
-    for name in (".gitignore", ".gitattributes"):
+    for name in GIT_BLOCKS:
         path = root / name
         if aclib_call(aclib.remove_block, path):
             if path.stat().st_size == 0:
@@ -796,6 +834,7 @@ def upgrade(root: Path, host: Host | None = None, payload: Path | None = None) -
     problem = config_problem(root)
     if problem:
         problems.append(problem)
+    problems += git_block_problems(root)
     if problems:
         raise DeployError("upgrade stopped before any change:\n" + bullets(problems))
     recorded = {f["path"]: f["sha256"] for f in manifest["files"]}
@@ -809,6 +848,9 @@ def upgrade(root: Path, host: Host | None = None, payload: Path | None = None) -
         _, kept = deploy_agents(root, recorded)
         step = "CLAUDE.md block"
         write_claude_block(root)
+        step = "git blocks"
+        for name in write_git_blocks(root, payload):
+            say(f"{name}: speckit-ac block updated.")  # at once: the blocks stay even if a later step fails
         step = "guard self-test"
         problem = guard_self_test(root, host)
         if problem:
@@ -981,13 +1023,19 @@ def doctor(root: Path, host: Host | None = None) -> int:
             line("FAIL", f'config "python" is `{cfg["python"]}`, the guard runs with `{python}`')
         else:
             line("ok", f'{aclib.CONFIG} valid; "python" matches the guard command')
-        for name in (".gitignore", ".gitattributes"):
-            path = root / name
-            text = path.read_bytes().decode("utf-8", "replace") if path.is_file() else ""
-            if aclib.BLOCK_BEGIN in text and aclib.BLOCK_END in text:
-                line("ok", f"{name} has the speckit-ac block")
+        expected = git_block_lines(cfg)  # the bundled payload: what `speckit-ac upgrade` would write
+        for name in GIT_BLOCKS:
+            try:
+                found = aclib.block_lines(root / name)
+            except aclib.AcError as error:
+                line("FAIL", f"{name}: cannot read the speckit-ac block ({error})")
+                continue
+            if found is None:
+                line("FAIL", f"{name} has no speckit-ac block (run `speckit-ac upgrade`)")
+            elif found != [item.rstrip() for item in expected[name]]:
+                line("warn", f"{name}: the speckit-ac block is out of date (run `speckit-ac upgrade`)")
             else:
-                line("FAIL", f"{name} has no speckit-ac block (run /speckit-ac-init again to verify and repair)")
+                line("ok", f"{name} has the speckit-ac block")
 
     check(c_prerequisites)
     check(c_manifest)

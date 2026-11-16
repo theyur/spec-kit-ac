@@ -616,6 +616,72 @@ def test_upgrade_then_uninstall_round_trips(project, host, payload):
     assert snapshot(project) == before
 
 
+def current_git_lines(project):
+    return deploy.git_block_lines(valid_config(project))
+
+
+def test_upgrade_refreshes_git_blocks(project, host, payload, capsys):
+    """S12-R02 (#19): an existing install gets the TRX line on upgrade; the rest of the file stays byte for byte."""
+    install(project, host, payload)
+    write(project / ".workflow/config.json", json.dumps(valid_config(project)))
+    lines = current_git_lines(project)
+    assert lines[".gitignore"][-1] == "/specs/*/ac/runs/**/*.trx"
+    user = "bin/\nobj/\n"
+    write(project / ".gitignore", user)
+    deploy.aclib.write_block(project / ".gitignore", lines[".gitignore"][:-1])  # the 0.1.3 block
+    write(project / ".gitignore", (project / ".gitignore").read_text(encoding="utf-8") + "# mine\n")
+    deploy.aclib.write_block(project / ".gitattributes", lines[".gitattributes"])
+    attributes = (project / ".gitattributes").read_bytes()
+    capsys.readouterr()
+    assert deploy.upgrade(project, host, payload) == 0
+    out = capsys.readouterr().out
+    assert ".gitignore: speckit-ac block updated." in out and ".gitattributes: speckit-ac block" not in out
+    text = (project / ".gitignore").read_text(encoding="utf-8")
+    assert deploy.aclib.block_lines(project / ".gitignore") == lines[".gitignore"]
+    assert text.startswith(user + "\n" + deploy.aclib.BLOCK_BEGIN) and text.endswith(deploy.aclib.BLOCK_END + "\n# mine\n")
+    assert (project / ".gitattributes").read_bytes() == attributes
+    stat = (project / ".gitignore").stat()
+    data = (project / ".gitignore").read_bytes()
+    assert deploy.upgrade(project, host, payload) == 0
+    assert "block updated" not in capsys.readouterr().out
+    assert (project / ".gitignore").read_bytes() == data and (project / ".gitignore").stat().st_mtime_ns == stat.st_mtime_ns
+
+
+def test_upgrade_without_config_writes_no_block(project, host, payload, capsys):
+    install(project, host, payload)
+    capsys.readouterr()
+    assert deploy.upgrade(project, host, payload) == 0
+    assert "block updated" not in capsys.readouterr().out
+    assert not (project / ".gitignore").exists() and not (project / ".gitattributes").exists()
+
+
+@pytest.mark.parametrize("content,reason", [
+    (b"bin/\n# >>> speckit-ac (managed; do not edit)\n/x/\n", "without"),
+    (b"bin/\n\xe4\xff\n", "not UTF-8"),
+])
+def test_upgrade_stops_on_an_unreadable_git_block(project, host, payload, content, reason):
+    """Plan round 1 MAJOR 3: checked before the guard is unregistered, so nothing has changed."""
+    install(project, host, payload)
+    write(project / ".workflow/config.json", json.dumps(valid_config(project)))
+    (project / ".gitignore").write_bytes(content)
+    before = snapshot(project)
+    with pytest.raises(DeployError, match=rf"(?s)stopped before any change.*\.gitignore: .*{reason}"):
+        deploy.upgrade(project, host, payload)
+    assert ours(project) == [deploy.guard_group()]
+    assert snapshot(project) == before
+
+
+def test_upgrade_with_config_then_uninstall_round_trips(project, host, payload, capsys):
+    write(project / ".workflow/config.json", json.dumps(valid_config(project)))
+    before = snapshot(project)
+    install(project, host, payload)
+    deploy.upgrade(project, host, payload)
+    assert ".gitignore: speckit-ac block updated." in capsys.readouterr().out
+    assert "/specs/*/ac/runs/**/*.trx" in (project / ".gitignore").read_text(encoding="utf-8")
+    deploy.uninstall(project, host)
+    assert snapshot(project) == before
+
+
 # ---- doctor ------------------------------------------------------------------------------------------------------
 
 def doctor(project, host, capsys):
@@ -734,11 +800,25 @@ def test_doctor_config_ok_and_blocks(project, host, payload, capsys):
     aclib.write_block(project / ".gitignore", ["x"])
     capsys.readouterr()
     code, out = doctor(project, host, capsys)
-    assert "[FAIL] .gitattributes has no speckit-ac block" in out and code == 1
+    assert "[FAIL] .gitattributes has no speckit-ac block (run `speckit-ac upgrade`)" in out and code == 1
     aclib.write_block(project / ".gitattributes", ["x"])
     code, out = doctor(project, host, capsys)
     assert code == 0, out
     assert 'valid; "python" matches the guard command' in out
+    for name in deploy.GIT_BLOCKS:  # S12-R03: an old block is out of date, not missing
+        assert f"[warn] {name}: the speckit-ac block is out of date (run `speckit-ac upgrade`)" in out
+    lines = current_git_lines(project)
+    for name in deploy.GIT_BLOCKS:
+        aclib.write_block(project / name, lines[name])
+    path = project / ".gitattributes"
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))  # an autocrlf=true checkout
+    code, out = doctor(project, host, capsys)
+    assert code == 0 and "out of date" not in out, out
+    assert "[ok] .gitignore has the speckit-ac block" in out and "[ok] .gitattributes has the speckit-ac block" in out
+    (project / ".gitignore").write_bytes(b"# >>> speckit-ac (managed; do not edit)\n/x/\n")  # no end marker
+    code, out = doctor(project, host, capsys)
+    assert code == 1 and "[FAIL] .gitignore: cannot read the speckit-ac block" in out, out
+    assert "[ok] .gitattributes has the speckit-ac block" in out  # the next file is still checked
 
 
 def test_doctor_warns_on_changed_agent_and_extra_file(project, host, payload, capsys):

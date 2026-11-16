@@ -120,9 +120,16 @@ placeholder `<UPPER_SNAKE>` is the key `upperSnake` (see `## Your task message` 
 | `specs/NNN-x/ac/sources.lock`, `features.lock` | lock files (written only by `ac_lock.py`) |
 | `specs/NNN-x/ac/runs/translate-NNN/` | `translation-report.md`, `skipped.json` |
 | `specs/NNN-x/ac/runs/run-NNN/` | `input-feedback.md`, `writer-report.md` |
-| `specs/NNN-x/ac/runs/run-NNN/analyze-K/` | `ac-results.trx`, `ac-results.md`, `judge-report.md`, `writer-feedback.md` |
+| `specs/NNN-x/ac/runs/run-NNN/analyze-K/` | `ac-results.trx` (local only, git-ignored), `ac-results.md`, `judge-report.md`, `writer-feedback.md` |
 | `<acProjectDir>/Features/FNNN/`, `Samples/FNNN/` | `.feature` files; golden samples |
 | `<acProjectDir>/StepDefinitions/FNNN/`, `Support/FNNN/`, `Support/Shared/` | step definitions and helpers |
+
+`ac-results.md` is committed, so `summarize_trx.py` writes it without absolute local paths:
+- a path below the project root becomes repo-relative (`tests/App.AcceptanceTests/StepDefinitions/X.cs:line 42`);
+- any other Windows drive or UNC path becomes `[external path]`;
+- POSIX paths other than the root are kept (most are routes).
+
+The raw TRX holds the user's login, the machine name and local paths. That is why it is git-ignored.
 
 ## Runtime files in `.workflow/`
 
@@ -146,11 +153,13 @@ The smoke test writes the marker itself (`smoke_test.py start`). The marker then
 | `.claude/skills/speckit-ac-*/SKILL.md` | spec-kit renders them as symlinks; install replaces each with a real file and adds `disable-model-invocation: true` and the command's `argument-hint` line (which spec-kit drops) before `metadata:`. |
 | `CLAUDE.md` | A block between `<!-- >>> speckit-ac (managed; do not edit) -->` and `<!-- <<< speckit-ac -->` with the main agent's soft rules. |
 
-Managed blocks (written by `/speckit-ac-init`, removed by `speckit-ac uninstall`; between
-`# >>> speckit-ac (managed; do not edit)` and `# <<< speckit-ac`, the rest of the file untouched):
+Managed blocks (written by `/speckit-ac-init`, refreshed by `speckit-ac upgrade` when `.workflow/config.json`
+exists, removed by `speckit-ac uninstall`; between `# >>> speckit-ac (managed; do not edit)` and
+`# <<< speckit-ac`, the rest of the file untouched; `doctor` warns when a block differs from what the config
+gives):
 
 - `.gitignore`: `/<refsDir>/`, `**/bin-ref/`, `**/obj-ref/`, `/.workflow/guard.log`,
-  `/.workflow/active-run.json`, `/.specify/extensions/ac/**/__pycache__/`;
+  `/.workflow/active-run.json`, `/.specify/extensions/ac/**/__pycache__/`, `/specs/*/ac/runs/**/*.trx`;
 - `.gitattributes`: `<acProjectDir>/Samples/** binary`, `<acProjectDir>/Features/**/*.feature text eol=lf`,
   `specs/*/acceptance.md text eol=lf`, `specs/*/spec.md text eol=lf`.
 

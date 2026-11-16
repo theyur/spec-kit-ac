@@ -144,12 +144,13 @@ Paths: `<ac>` = the AC project folder (outside the solution file), `F00N` = the 
 | `<ac>/bin/`, `<ac>/obj/` (build output) | read/write | **no** | **no** | **no** |
 | Implementation source | read/write | **no** | **no** | **no** |
 | Unit test project(s) | read/write | **no** | **no** | **no** |
-| Reference assemblies + API listings (`<refsDir>/**`, default `artifacts/refs/`; made by script) | read (guard blocks writes) | no | read | read |
+| API listings (`<refsDir>/api/**`, default `artifacts/refs/api/`; made by script) | read (guard blocks writes) | no | read | read |
+| Reference assemblies (`<refsDir>/*.dll`; made by script; used by the compiler in the ref-mode build) | read (guard blocks writes) | no | **no** | **no** |
 | `runs/translate-NNN/translation-report.md` | read (guard blocks writes to `runs/`) | read/write (active run only) | no | no |
 | `runs/run-NNN/input-feedback.md` | read | no | read (active run) | no |
 | `runs/run-NNN/writer-report.md` | read | no | read/write (active run) | read (active run) |
-| `runs/run-NNN/analyze-K/ac-results.trx` (raw) | read | **no** | **no** | **no** |
-| `runs/run-NNN/analyze-K/ac-results.md` (cleaned) | read | **no** | **no** | read (active analyze) |
+| `runs/run-NNN/analyze-K/ac-results.trx` (raw; local only, git-ignored) | read | **no** | **no** | **no** |
+| `runs/run-NNN/analyze-K/ac-results.md` (cleaned; no absolute local paths) | read | **no** | **no** | read (active analyze) |
 | `runs/run-NNN/analyze-K/judge-report.md` | read | no | no | write (active analyze, `Write` only) |
 | `.workflow/active-run.json` | read (written only by the run scripts; guard) | no | no | no |
 | `.workflow/config.json` | read/write (`/speckit-ac-init`) | no | no | no |

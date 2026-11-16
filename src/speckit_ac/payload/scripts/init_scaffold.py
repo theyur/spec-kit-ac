@@ -118,8 +118,9 @@ def render(cfg: dict, target_framework: str, runner: str, framework_refs: list[s
 
 
 def gitignore_lines(cfg: dict) -> list[str]:
+    # The raw TRX holds the user's login, the machine name and local paths; only ac-results.md is a run record.
     return [f"/{cfg['refsDir']}/", "**/bin-ref/", "**/obj-ref/", "/.workflow/guard.log", "/.workflow/active-run.json",
-            "/.specify/extensions/ac/**/__pycache__/"]
+            "/.specify/extensions/ac/**/__pycache__/", "/specs/*/ac/runs/**/*.trx"]
 
 
 def gitattributes_lines(cfg: dict) -> list[str]:
