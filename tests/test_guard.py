@@ -89,9 +89,10 @@ CT_CASES = [
     ("writer Glob on AC project root", W, "Glob", {"path": f"{{root}}/{AC}", "pattern": "**/*"}, BOTH, DENY),
     ("writer Glob with ..", W, "Glob", {"path": f"{{root}}/{AC}/Features", "pattern": "../../../src/**"}, BOTH, DENY),
     ("writer Grep path=src", W, "Grep", {"path": "{root}/src", "pattern": "class"}, BOTH, DENY),
-    ("writer Grep in refs", W, "Grep", {"path": "{root}/artifacts/refs", "pattern": "public"}, BOTH, ALLOW),
-    ("writer Grep with absolute glob", W, "Grep", {"path": "{root}/artifacts/refs", "pattern": "x", "glob": "C:/*"}, BOTH,
-     DENY),
+    # Step 12 (#17): the writer searches only the API listings, so the refs root is denied now (was ALLOW).
+    ("writer Grep in refs", W, "Grep", {"path": "{root}/artifacts/refs", "pattern": "public"}, BOTH, DENY),
+    ("writer Grep with absolute glob", W, "Grep", {"path": "{root}/artifacts/refs/api", "pattern": "x", "glob": "C:/*"},
+     BOTH, DENY),
     ("writer calls Skill", W, "Skill", {"skill": "verify"}, BOTH, DENY),
     ("writer calls Agent", W, "Agent", {"prompt": "read src"}, BOTH, DENY),
     ("writer calls an MCP tool", W, "mcp__rider__read_file", {"path": "src/a.cs"}, BOTH, DENY),
@@ -311,7 +312,27 @@ NEW_CASES = [
     ("Explore calls Skill speckit-ac-tests-write", "Explore", "Skill", {"skill": "speckit-ac-tests-write"}, NONE, DENY),
 ]
 
-CASES = CT_CASES + NEW_CASES
+# Step 12 (#17, S12-R10): the writer and the judge read and search only <refsDir>/api; the DLLs are for the compiler.
+REFS = "{root}/artifacts/refs"
+REFS_CASES = [
+    case
+    for who, role in (("writer", W), ("judge", J))
+    for case in (
+        (f"{who} reads a reference DLL", role, "Read", {"file_path": f"{REFS}/App.Core.dll"}, BOTH, DENY),
+        (f"{who} Greps the refs root", role, "Grep", {"path": REFS, "pattern": "Internal"}, BOTH, DENY),
+        (f"{who} Globs the refs root", role, "Glob", {"path": REFS, "pattern": "*.dll"}, BOTH, DENY),
+        (f"{who} Greps a reference DLL", role, "Grep", {"path": f"{REFS}/App.Core.dll", "pattern": "Internal"}, BOTH,
+         DENY),
+        (f"{who} reads an API listing in refs/api", role, "Read", {"file_path": f"{REFS}/api/App.Core.cs"}, BOTH, ALLOW),
+        (f"{who} Greps refs/api", role, "Grep", {"path": f"{REFS}/api", "pattern": "public"}, BOTH, ALLOW),
+        (f"{who} Globs refs/api", role, "Glob", {"path": f"{REFS}/api", "pattern": "*.cs"}, BOTH, ALLOW),
+    )
+] + [
+    ("main reads a reference DLL", MAIN, "Read", {"file_path": f"{REFS}/App.Core.dll"}, NONE, ALLOW),
+    ("main writes a reference DLL", MAIN, "Write", {"file_path": f"{REFS}/App.Core.dll"}, NONE, DENY),
+]
+
+CASES = CT_CASES + NEW_CASES + REFS_CASES
 
 
 def lock_files(locked):

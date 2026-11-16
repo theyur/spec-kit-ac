@@ -84,6 +84,25 @@ def test_round_trip_fresh_project(project, payload, capsys):
     assert snapshot(project) == before
 
 
+def test_upgrade_writes_git_blocks_with_a_config(project, payload, capsys):
+    """S12-R04 (#19): with a config, upgrade writes the .gitignore block with the TRX line; doctor agrees; the
+    project round-trips (the config is user data, written before the snapshot)."""
+    from acproject import CONFIG
+    write(project / ".workflow/config.json", json.dumps(CONFIG))
+    before = snapshot(project)
+    assert deploy.install(project, payload=payload) == 0
+    assert deploy.upgrade(project, payload=payload) == 0
+    assert ".gitignore: speckit-ac block updated." in capsys.readouterr().out
+    assert "/specs/*/ac/runs/**/*.trx" in deploy.aclib.block_lines(project / ".gitignore")
+    code = deploy.doctor(project)
+    out = capsys.readouterr().out
+    assert "out of date" not in out and "speckit-ac block (" not in out, out
+    assert "[ok] .gitignore has the speckit-ac block" in out and "[ok] .gitattributes has the speckit-ac block" in out
+    assert code == 0, out
+    assert deploy.uninstall(project) == 0
+    assert snapshot(project) == before
+
+
 def test_round_trip_with_existing_settings_and_agent(project, payload):
     """(b): an indent-2 settings.json with another hook and another agent come back byte for byte."""
     write(project / ".claude/settings.json", json.dumps({"hooks": {"PreToolUse": [OTHER_GROUP]}}, indent=2) + "\n")

@@ -7,7 +7,45 @@ version and an `## [Unreleased]` section until the next release.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- The raw test results `specs/*/ac/runs/**/ac-results.trx` are git-ignored. A TRX file holds the user's login, the
+  machine name and local paths; only the cleaned `ac-results.md` is a run record (#19).
+- `ac-results.md` holds no absolute local path any more (#18):
+  - paths below the project root (a worktree included) are written repo-relative, for example
+    `tests/App.AcceptanceTests/StepDefinitions/…:line 42`;
+  - every other Windows drive or UNC path becomes `[external path]`. That covers the user profile, the NuGet
+    cache, SDK folders and a network share.
+- The test writer and the judge can read and search only the API listings in `<refsDir>/api/`. They can no longer
+  Grep the reference DLLs beside them, which confirmed guessed type names (#17).
+- `speckit-ac doctor` advises `speckit-ac upgrade` for a missing `.gitignore` / `.gitattributes` block. Re-running
+  `/speckit-ac-init` only verifies, so the old advice did not help.
+
+### Changed
+
+- `speckit-ac upgrade` refreshes the managed blocks in `.gitignore` and `.gitattributes` when
+  `.workflow/config.json` exists. Only the text between the markers changes. `doctor` warns when a block is out of
+  date.
+
+### Known limits of the path cleaning
+
+- POSIX paths other than the project root stay as they are; most are routes (`/api/users/42`). So do MSYS forms
+  such as `/c/Users/…`.
+- An external path hides up to its last separator on the line. Words between two such paths can be hidden too,
+  while words after the last separator stay. For example, `C:\Users\First Last` keeps `Last`, and a file name
+  with a space keeps its tail. The same goes for a path with mixed separators, a path with an unclosed quote, and
+  a drive path glued to a word (`dirC:\…`).
+- JSON-escaped UNC paths (`\\\\server\\share`) and long-path UNC forms (`\\?\UNC\…`) are not recognised.
+- A sibling folder whose name is the root plus a space (`repo 2`) gives `. 2\…`.
+
+### Upgrade
+
+- Run `speckit-ac upgrade` in existing installs. It adds the TRX line to the `.gitignore` block.
+  - It stops before any change, and names the file, when `.gitignore` or `.gitattributes` is not UTF-8 or holds
+    a broken block.
+- Untrack TRX files that are already committed with `git rm --cached -- "specs/*/ac-results.trx"`, then commit.
+  Git history keeps them.
+- `ac-results.md` files written before the upgrade are not rewritten.
 
 ## [0.1.3] - 2026-11-14
 

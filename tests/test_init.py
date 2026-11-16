@@ -476,6 +476,56 @@ def test_block_keeps_the_rest(aclib, tmp_path, original):
     assert aclib.BLOCK_BEGIN not in rest and rest.startswith(original.rstrip("\r\n")) and rest.endswith("after\n")
 
 
+TRX_PATTERN = "/specs/*/ac/runs/**/*.trx"
+
+
+def test_gitignore_lines_end_with_the_trx_pattern(scaffold):
+    """S12-R01 (#19): the raw TRX holds the login, machine name and local paths; it is never committed."""
+    assert scaffold.gitignore_lines(CONFIG) == [f"/{CONFIG['refsDir']}/", "**/bin-ref/", "**/obj-ref/",
+                                                "/.workflow/guard.log", "/.workflow/active-run.json",
+                                                "/.specify/extensions/ac/**/__pycache__/", TRX_PATTERN]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_trx_pattern_is_ignored_by_git(aclib, scaffold, tmp_path):
+    """S12-R04: git itself ignores a run's TRX and keeps its ac-results.md."""
+    aclib.write_block(tmp_path / ".gitignore", scaffold.gitignore_lines(CONFIG))
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    analyze = "specs/001-x/ac/runs/run-001/analyze-1"
+
+    def ignored(rel):
+        return subprocess.run(["git", "-c", "safe.directory=*", "check-ignore", "-q", "--no-index", rel],
+                              cwd=tmp_path).returncode
+
+    assert ignored(f"{analyze}/ac-results.trx") == 0
+    assert ignored(f"{analyze}/ac-results.md") == 1
+    assert ignored(f"{analyze}/judge-report.md") == 1
+
+
+def test_block_lines(aclib, tmp_path):
+    path = tmp_path / ".gitignore"
+    assert aclib.block_lines(path) is None  # no file
+    path.write_bytes(b"bin/\n")
+    assert aclib.block_lines(path) is None  # no block
+    aclib.write_block(path, ["/a/", "/b/  "])
+    assert aclib.block_lines(path) == ["/a/", "/b/"]
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    assert aclib.block_lines(path) == ["/a/", "/b/"]
+    aclib.write_block(path, [])
+    assert aclib.block_lines(path) == []
+
+
+@pytest.mark.parametrize("content,reason", [
+    (b"# >>> speckit-ac (managed; do not edit)\n/x/\n", "without"),
+    (b"bin/\n\xff\xfe\n", "not UTF-8"),
+])
+def test_block_lines_names_the_file_it_cannot_read(aclib, tmp_path, content, reason):
+    path = tmp_path / ".gitignore"
+    path.write_bytes(content)
+    with pytest.raises(aclib.AcError, match=rf"^\.gitignore: .*{reason}"):
+        aclib.block_lines(path)
+
+
 def test_remove_block_restores_an_appended_file(aclib, tmp_path):
     path = tmp_path / "file"
     path.write_bytes(b"bin/\n")

@@ -88,11 +88,12 @@ def make_project(base: Path, config=CONFIG, features=FEATURES, current="specs/00
     return base
 
 
-def run_script(project: Path, name: str, *args: str) -> subprocess.CompletedProcess:
-    """Run an installed script the way the commands do: `<python> -I .specify/extensions/ac/scripts/<name>`."""
+def run_script(project: Path, name: str, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    """Run an installed script the way the commands do: `<python> -I .specify/extensions/ac/scripts/<name>`, from the
+    project root unless `cwd` says otherwise."""
     script = project / EXTENSION / "scripts" / name
-    return subprocess.run([sys.executable, "-I", str(script), *args], cwd=project, capture_output=True, text=True,
-                          encoding="utf-8")
+    return subprocess.run([sys.executable, "-I", str(script), *args], cwd=cwd or project, capture_output=True,
+                          text=True, encoding="utf-8")
 
 
 def run_guard(project: Path, payload, project_dir="project", guard: Path | None = None) -> tuple[int, str]:

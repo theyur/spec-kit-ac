@@ -426,7 +426,9 @@ class Guard:
         """Folders the role may read and search (search roots)."""
         if role == TRANSLATOR:
             return self.spec_inputs + [f"{self.samples}/{self.tag}", f"{self.features}/{self.tag}"]
-        return self.spec_inputs + [self.features, self.samples, *self.isolated, self.refs]
+        # Only the API listings: the DLLs beside them are for the compiler (a Grep on a DLL would confirm guessed
+        # names, internal ones included).
+        return self.spec_inputs + [self.features, self.samples, *self.isolated, f"{self.refs}/api"]
 
     def readable_file(self, rel, role):
         files = [fold(CONSTITUTION)]

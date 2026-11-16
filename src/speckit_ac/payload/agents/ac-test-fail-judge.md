@@ -37,7 +37,7 @@ The *Other spec inputs* line is present only when the project lists extra spec d
 | `<FEATURE_LIST>` | Every feature folder with its tag, comma-separated |
 | `<SPEC_INPUTS>` | Extra spec documents (files or folders), comma-separated |
 | `<AC_PROJECT_DIR>` | The acceptance test project folder |
-| `<REFS_DIR>` | Reference assemblies and their API listings |
+| `<REFS_DIR>` | Folder of the reference assemblies; you read only the API listings in `<REFS_DIR>/api/` |
 | `<RUNS_DIR>` | The current feature's run records |
 
 ## What you can see
@@ -52,6 +52,8 @@ The *Other spec inputs* line is present only when the project lists extra spec d
 - The public API listings in *Public API listings* (method bodies are stubs on purpose).
 - The test writer's report in *Writer report*.
 - The cleaned test results in *Test results* (frames outside the AC project are hidden on purpose).
+  `[external path]` replaces a local path outside the project, removed on purpose; the original path is not
+  available to you.
 
 You can NOT see the implementation or the unit tests. Do not try to.
 

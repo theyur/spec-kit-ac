@@ -427,6 +427,26 @@ def write_block(path: Path, lines: list[str], begin: str = BLOCK_BEGIN, end: str
     return True
 
 
+def block_lines(path: Path, begin: str = BLOCK_BEGIN, end: str = BLOCK_END) -> list[str] | None:
+    """The lines between the markers of the managed block in `path` (CRLF folded, trailing whitespace stripped), or
+    None when the file or the block is missing. A file that is not UTF-8 or a broken block raises AcError naming the
+    file, the same cases in which write_block would fail."""
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_bytes().decode("utf-8")
+        span = _block_span(text, begin, end)
+    except UnicodeDecodeError as error:
+        raise AcError(f"{path.name}: not UTF-8 ({error.reason} at byte {error.start})") from None
+    except AcError as error:
+        raise AcError(f"{path.name}: {error}") from None
+    if not span:
+        return None
+    inner = text[span[0] + len(begin):text.find(end, span[0])].replace("\r\n", "\n")
+    # inner starts with the begin line's break and ends with the text before the end marker on its line.
+    return [line.rstrip() for line in inner.split("\n")[1:-1]]
+
+
 def remove_block(path: Path, begin: str = BLOCK_BEGIN, end: str = BLOCK_END) -> bool:
     """Remove the managed block (and one blank line before it) from `path`. True if the file changed."""
     if not path.is_file():

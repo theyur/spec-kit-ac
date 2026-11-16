@@ -7,8 +7,15 @@ name, marked ambiguous when two features have a scenario of that name. Stack fra
 With --current, results are split into "Current feature" and "Regression" (all other features); --only-current
 reduces the regression section to one line of counts and the F00N/AC-NNN keys of the results that did not pass.
 Fails (exit 1) when the TRX holds no result, or none of the --current feature: no test ran is never a pass.
+
+The file is committed with the run records, so it holds no absolute local path (scrub_paths, on every written
+line). Pass 1 finds the project root by its own prefix (both separators; case ignored on Windows) and writes what
+follows as a repo-relative POSIX path. Pass 2 replaces every other Windows drive or UNC path with "[external path]",
+up to its last separator on the line (or its last matching quote, or ":line" in a stack frame), so a user name with
+spaces is hidden rather than cut. POSIX paths other than the root stay: they are more likely routes.
 """
 import argparse
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -22,6 +29,101 @@ PENDING = ("PendingStepException", "MissingStepDefinitionException")
 FRAME_FILE = re.compile(r" in (?P<file>.+?):line \d+\s*$")
 FEATURE_SEGMENT = re.compile(r"^F\d{3,}$", re.IGNORECASE)
 OUTCOMES = ("passed", "failed", "pending", "skipped")
+EXTERNAL = "[external path]"
+QUOTES = "'\""
+# A drive path (not after a letter or digit, so `http://` is none) or a UNC path: two backslashes, a server name, a
+# backslash and the first character of a share name (so regex text such as `\\d+\\.` is none).
+START = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]|(?<![\\A-Za-z0-9])\\\\[A-Za-z0-9._-]+\\[^\\\s<>|'\"]")
+REGION_END = re.compile(r"[<>|]")
+RUN_END = re.compile(r"[\s'\"<>|]|:line ")
+FRAME_LINE = re.compile(r":line \d")
+
+
+def root_pattern(root, windows):
+    """A root form wherever it starts a path: not glued to a name before it, followed by a separator or by a
+    character no path name holds. A bare drive root (`X:`, a subst drive) counts only with a separator."""
+    root = root.rstrip("\\/")
+    body = "".join(r"[\\/]" if c in "\\/" else re.escape(c) for c in root)
+    bare = "" if re.fullmatch(r"[A-Za-z]:", root) else r"|(?=[\s'\"<>|]|$)"
+    return re.compile(r"(?<![A-Za-z0-9_.\\/])" + body + r"(?:([\\/])" + bare + ")", re.IGNORECASE if windows else 0)
+
+
+def relative_to_root(line, roots, windows):
+    """Pass 1: every root path becomes repo-relative POSIX; the root itself becomes `.`."""
+    patterns = [root_pattern(r, windows) for r in sorted(set(roots), key=len, reverse=True) if r.rstrip("\\/")]
+    for pattern in patterns:
+        matches = list(pattern.finditer(line))
+        if not matches:
+            continue
+        out, pos = [], 0
+        for i, match in enumerate(matches):
+            if match.start() < pos:
+                continue
+            out.append(line[pos:match.start()])
+            next_root = matches[i + 1].start() if i + 1 < len(matches) else len(line)
+            if match.group(1) is None:
+                out.append(".")
+                pos = match.end()
+                continue
+            frame = line[:match.start()].endswith(" in ") and FRAME_LINE.search(line, match.end())
+            if frame:  # a stack frame: the path runs to ":line", spaces included
+                end = min(frame.start(), next_root)
+            else:
+                stop = RUN_END.search(line, match.end())
+                end = min(stop.start() if stop else len(line), next_root)
+            out.append(line[match.end():end].replace("\\", "/") or ".")
+            pos = end
+        out.append(line[pos:])
+        line = "".join(out)
+    return line
+
+
+def hide_external(line):
+    """Pass 2: every other Windows drive or UNC path becomes EXTERNAL. It ends at ":line" in a stack frame, at the
+    last matching quote when quoted, else at the end of the run holding its last separator: hiding too much wins
+    over leaking a tail (a user name with spaces). The search stops at `<`, `>` and `|` (table cells)."""
+    pos = 0
+    while True:
+        match = START.search(line, pos)
+        if not match:
+            return line
+        start = match.start()
+        stop = REGION_END.search(line, match.end())
+        region_end = stop.start() if stop else len(line)
+        region = line[start:region_end]
+        frame = FRAME_LINE.search(region)
+        quote = line[start - 1] if start > 0 and line[start - 1] in QUOTES else ""
+        if frame and line[:start].endswith(" in "):
+            end = start + frame.start()
+        elif quote and quote in region:
+            end = start + region.rfind(quote)
+        else:
+            separator = "/" if match.group().endswith("/") and not match.group().startswith("\\\\") else "\\"
+            last = start + region.rfind(separator)
+            space = re.search(r"\s", line[last:region_end])
+            end = last + space.start() if space else region_end
+            while end > start and line[end - 1] in ".,;:)":
+                end -= 1
+        line = line[:start] + EXTERNAL + line[end:]
+        pos = start + len(EXTERNAL)
+
+
+def scrub_paths(line, roots, windows=os.name == "nt"):
+    """One line of text without absolute local paths (S12-R05). `roots` are the project root's forms."""
+    return hide_external(relative_to_root(line, roots, windows))
+
+
+def root_forms(root):
+    """The resolved root and, when the current folder is the root, the current folder as the OS spells it (subst
+    drives, junctions): frames carry the path the compiler saw."""
+    forms = [str(root)]
+    try:
+        cwd = os.getcwd()
+        if cwd != str(root) and Path(cwd).resolve() == root:
+            forms.append(cwd)
+    except OSError:
+        pass
+    return forms
 
 
 def feature_of_file(feature_file, features_dir):
@@ -199,7 +301,10 @@ def main():
         body, counts = section(tests, 2)
         lines += body
         scopes = None
-    aclib.write_text(Path(args.out), "\n".join(lines) + "\n")
+    # The file is committed: no absolute local path in any line. clean_stack() has already decided on raw frames.
+    roots = root_forms(root)
+    text = "\n".join(scrub_paths(line, roots) for line in "\n".join(lines).split("\n"))
+    aclib.write_text(Path(args.out), text + "\n")
     print(f"Wrote {args.out}: {len(tests)} test(s), " + ", ".join(f"{k} {v}" for k, v in counts.items()))
     if scopes:
         print(scopes)

@@ -9,6 +9,7 @@ takes a few minutes. Run with SPECKIT_AC_DOTNET_E2E=1.
 """
 import os
 import platform
+import re
 import shlex
 import shutil
 import sys
@@ -62,7 +63,15 @@ def implement_and_run(project, cfg, fixture, number, analyze):
     assert (project / analyze_dir / "ac-results.trx").is_file()
     script(project, "summarize_trx.py", f"{analyze_dir}/ac-results.trx", f"{analyze_dir}/ac-results.md",
            "--current", f"F{number}")
-    rows = check_stage.results_rows((project / analyze_dir / "ac-results.md").read_text(encoding="utf-8"))
+    md = (project / analyze_dir / "ac-results.md").read_text(encoding="utf-8")
+    # S12-A05 (#18, #19): the committed summary holds no absolute local path; the raw TRX is git-ignored.
+    assert re.search(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]|\\\\\w", md) is None, md
+    assert str(project).lower().replace("\\", "/") not in md.lower().replace("\\", "/")
+    assert ok(["git", "-c", "safe.directory=*", "check-ignore", f"{analyze_dir}/ac-results.trx"], project, "check-ignore")
+    rows = check_stage.results_rows(md)
+    if any(r["outcome"] == "failed" for r in rows):
+        # The failing frame, repo-relative (for feature 002 the failures are feature 001's regressions).
+        assert re.search(rf"in {re.escape(cfg['acProjectDir'])}/StepDefinitions/F\d{{3}}/\S+\.cs:line \d", md), md
     return project / analyze_dir, {r["key"]: r["outcome"] for r in rows}
 
 
