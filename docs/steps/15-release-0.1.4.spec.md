@@ -1,6 +1,6 @@
 # Step 15 — Release 0.1.4
 
-**Status:** spec-approved (2026-11-16; the user approved it with decision 1 reworded and asked to start the release PR) · **Tracker row:** 15 · **Source of truth:** `docs/DESIGN.md` §9
+**Status:** done (2026-11-16; released as [v0.1.4](https://github.com/theyur/spec-kit-ac/releases/tag/v0.1.4); spec-approved 2026-11-16 with decision 1 reworded) · **Tracker row:** 15 · **Source of truth:** `docs/DESIGN.md` §9
 
 ## Goal
 
