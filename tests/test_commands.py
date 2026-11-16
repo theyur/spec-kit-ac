@@ -517,6 +517,17 @@ def test_real_spec_kit_install(tmp_path):
     assert (project / ".specify/extensions/ac/templates/acceptance-template.md").is_file()
 
 
+def test_init_offers_hosts_by_hand():
+    """S14-R02 (#16): hosts are offered by hand, init stops with neither, the summary marks a host."""
+    body = " ".join(text("init").split())
+    assert "`proposal.hostProjects`" in body and "always ask which hosts to use, even when there is only one" in body
+    assert "No candidate and no host: stop. No project can be the AC surface" in body
+    assert "Accept only projects from `acSurfaceProjects` or `hostProjects`, also when the user changes the surface" in body
+    assert 'mark each chosen host as "host (`Exe`)"' in body
+    assert ("Also ask when the chosen surface is not `proposal.acSurfaceProjects` and `proposal.targetFramework` is "
+            "lower than the highest runnable `netX.Y`") in body
+
+
 def test_init_treats_internals_visible_to_as_information():
     """S13-R09 (#15): no stop on InternalsVisibleTo; the testability bullet names the AC assembly only."""
     body = " ".join(text("init").split())

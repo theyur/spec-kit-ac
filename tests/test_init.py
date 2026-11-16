@@ -152,6 +152,25 @@ def test_propose_framework_and_folder(detect, tmp_path):
     assert detect.propose(tmp_path, "Shop.slnx", [xunit])["acProjectDir"] == "tests/Shop.AcceptanceTests"
 
 
+def test_propose_hosts(detect, tmp_path):
+    """S14-R01 (#16): Exe projects are hosts, never candidates; other output types are neither."""
+    host = project_facts("src/H/H.csproj", ["net10.0"], output="Exe")
+    unit = project_facts("tests/T/T.csproj", ["net10.0"], output="Exe", test=True, frameworks=["xunit3"])
+    only_host = detect.propose(tmp_path, "App.slnx", [host, unit])
+    assert only_host["acSurfaceProjects"] == [] and only_host["hostProjects"] == ["src/H/H.csproj"]
+    lib = project_facts("src/A/A.csproj", ["net10.0"])
+    mixed = detect.propose(tmp_path, "App.slnx", [host, lib, unit])
+    assert mixed["acSurfaceProjects"] == ["src/A/A.csproj"] and mixed["hostProjects"] == ["src/H/H.csproj"]
+    others = [project_facts("src/W/W.csproj", ["net10.0-windows"], output="WinExe"),
+              project_facts("src/E/E.csproj", ["net10.0"], output="")]
+    neither = detect.propose(tmp_path, "App.slnx", [*others, unit])
+    assert neither["acSurfaceProjects"] == [] and neither["hostProjects"] == []
+    cases = [project_facts("src/B/B.csproj", ["net10.0"], output="exe"),
+             project_facts("src/C/C.csproj", ["net10.0"], output="EXE"), host]
+    assert detect.propose(tmp_path, "App.slnx", cases)["hostProjects"] == [
+        "src/B/B.csproj", "src/C/C.csproj", "src/H/H.csproj"]  # any case, in the order of projects
+
+
 def test_internals_visible_to_reads_any_encoding(detect, tmp_path):
     write(tmp_path / "src/A/A.csproj", "<Project />\n")
     (tmp_path / "src/A/Info.cs").write_bytes("// Gr\xfc\xdfe\n[assembly: InternalsVisibleTo(\"T\")]\n".encode("latin-1"))
@@ -196,6 +215,7 @@ def test_detect_solution(tmp_path):
     assert {p["id"]: p["version"] for p in tests["packages"]}["NUnit"] == "1.0.0"
     proposal = found["proposal"]
     assert proposal["acSurfaceProjects"] == ["src/App.Core/App.Core.csproj"]  # not the exe, not the tests
+    assert proposal["hostProjects"] == ["src/App.Cli/App.Cli.csproj"]  # offered by hand only (S14-R01)
     assert proposal["unitTestProjects"] == ["tests/App.Tests/App.Tests.csproj"]
     assert proposal["testFramework"] == "nunit" and proposal["targetFramework"] == "net10.0"
     assert proposal["acProjectDir"] == "tests/App.AcceptanceTests" and proposal["refsDir"] == "artifacts/refs"
@@ -343,6 +363,24 @@ def test_config_script_writes_once(tmp_path):
     assert again.returncode == 1 and "never overwritten" in again.stderr
 
 
+HOST = "src/App.Host/App.Host.csproj"
+
+
+def test_config_accepts_an_exe_surface(scaffold, tmp_path):
+    """S14-R05: a host chosen by hand is written as the surface and referenced by the AC project in normal mode."""
+    project = make_project(tmp_path / "p", config=None)
+    write(project / HOST, csproj(properties={"OutputType": "Exe"}, sdk="Microsoft.NET.Sdk.Web"))
+    result = run_script(project, "init_config.py", "--solution", "App.slnx", "--surface", HOST, "--ac-project-dir",
+                        AC, "--framework", "xunit3", "--runner", "mtp")
+    assert result.returncode == 0, result.stderr
+    written = json.loads((project / ".workflow/config.json").read_text(encoding="utf-8"))
+    assert written["acSurfaceProjects"] == [HOST]
+    text = scaffold.render(written, "net10.0", "mtp", ["Microsoft.AspNetCore.App"])[f"{AC}/App.AcceptanceTests.csproj"]
+    normal = text[text.index("<ItemGroup Condition=\"'$(AcRefMode)' != 'true'\">"):]
+    assert '<ProjectReference Include="../../src/App.Host/App.Host.csproj" />' in normal.split("</ItemGroup>")[0]
+    assert '<FrameworkReference Include="Microsoft.AspNetCore.App" />' in text
+
+
 # ---- init_scaffold -------------------------------------------------------------------------------------------------
 
 def scaffold_config(framework="xunit3", runner="mtp", **extra):
@@ -406,6 +444,21 @@ def test_packages_order_and_filters(scaffold):
     assert dict(wanted) == {"xunit.v3": "2.0.0", "Reqnroll.xunit.v3": None,
                             "Microsoft.Extensions.TimeProvider.Testing": None, "Newtonsoft.Json": "13.0.1"}
     assert notes == [] and scaffold.framework_references(surface) == ["Microsoft.AspNetCore.App"]
+
+
+@pytest.mark.parametrize("surfaces,expected", [
+    ([[("Microsoft.AspNetCore.App", True)]], ["Microsoft.AspNetCore.App"]),  # the Web SDK's implicit one (S14-R03)
+    ([[("Microsoft.NETCore.App", True)]], []),
+    ([[("Microsoft.NETCore.App", False)]], ["Microsoft.NETCore.App"]),  # explicit ones as before step 14
+    ([[("Microsoft.WindowsDesktop.App", True)]], []),
+    ([[("Microsoft.WindowsDesktop.App", False)]], ["Microsoft.WindowsDesktop.App"]),
+    ([[("Microsoft.AspNetCore.App", True)], [("microsoft.aspnetcore.app", False)]], ["Microsoft.AspNetCore.App"]),
+    ([[("B.Framework", False), ("Microsoft.NETCore.App", True)], [("A.Framework", False), ("B.Framework", False)]],
+     ["B.Framework", "A.Framework"]),
+], ids=["implicit-aspnet", "implicit-netcore", "explicit-netcore", "implicit-desktop", "explicit-desktop",
+        "duplicate-any-case", "first-seen-order"])
+def test_framework_references(scaffold, surfaces, expected):
+    assert scaffold.framework_references([facts(refs=refs) for refs in surfaces]) == expected
 
 
 def test_packages_versions(scaffold):

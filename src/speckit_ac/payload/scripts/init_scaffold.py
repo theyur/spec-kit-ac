@@ -7,7 +7,8 @@ Samples/ StepDefinitions/ Support/Shared/ with .gitkeep) from the extension's te
 managed blocks in .gitignore and .gitattributes. Never adds the AC project to the solution. Packages: the
 (framework, runner) recipe of init_config.py, the Reqnroll adapter, Microsoft.Extensions.TimeProvider.Testing, and
 every package of the surface projects that is not implicit or PrivateAssets=all (their public types must compile in
-ref mode). Versions: central pins; else the surface's version, then the unit tests' (highest when several); else
+ref mode), and their framework references (non-implicit ones and an implicit Microsoft.AspNetCore.App). Versions:
+central pins; else the surface's version, then the unit tests' (highest when several); else
 the latest stable. On failure the AC folder is removed again (or emptied again, if it existed empty before) and the
 other files changed so far are listed.
 """
@@ -70,12 +71,23 @@ def packages(framework: str, runner: str, surface: list[dict], unit_tests: list[
     return out, notes
 
 
+# Implicit framework references the AC project needs too: the Web SDK adds Microsoft.AspNetCore.App implicitly, and
+# ref mode compiles against the surface's ASP.NET Core types. Microsoft.NETCore.App (every project has it) and the
+# Windows Desktop ones (not supported) stay out.
+IMPLICIT_KEPT = {"microsoft.aspnetcore.app"}
+
+
 def framework_references(surface: list[dict]) -> list[str]:
-    refs = []
+    """The surface's non-implicit framework references and an implicit Microsoft.AspNetCore.App; first spelling seen,
+    no duplicates (case ignored)."""
+    refs, seen = [], set()
     for project in surface:
         for ref in project["frameworkReferences"]:
-            if not ref["implicit"] and ref["id"] not in refs:
-                refs.append(ref["id"])
+            key = ref["id"].lower()
+            if key in seen or (ref["implicit"] and key not in IMPLICIT_KEPT):
+                continue
+            seen.add(key)
+            refs.append(ref["id"])
     return refs
 
 

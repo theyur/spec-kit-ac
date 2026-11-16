@@ -1050,6 +1050,42 @@ def test_real_listing_one_line_members(export_refs):
         assert gone not in out, gone
 
 
+EXE_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "exe"
+EXE_KEPT = {
+    "worker": ["public static class Pricing", "public static long ToCents(decimal amount)",
+               "public class Worker : BackgroundService", "public Worker(ILogger<Worker> logger)",
+               "protected override Task ExecuteAsync(CancellationToken stoppingToken)"],
+    "web": ["public class Program", "public Program()", "public static class Greeting",
+            "public static string Hello(string name)",
+            "public static IEndpointRouteBuilder MapGreeting(this IEndpointRouteBuilder routes)"],
+}
+# The worker's async state machine goes; the [AsyncStateMachine(typeof(<ExecuteAsync>d__2))] attribute on the kept
+# method stays (it is an attribute line, not a declaration).
+EXE_GONE = {"worker": ["class Program", "Main(", "struct <ExecuteAsync>d__", "Decimals"], "web": ["Main("]}
+
+
+@pytest.mark.parametrize("kind", ["worker", "web"])
+def test_real_exe_listings(export_refs, tmp_path, kind):
+    """S14-R06 (#16): ilspycmd 11.2 listings of a worker and a web host (`Exe`) export like a library's. Own loader:
+    the stripped state machine leaves a blank line inside Worker (out of scope), which filtered_fixture rejects."""
+    listing = (EXE_FIXTURES / f"{kind}.listing.cs.txt").read_text(encoding="utf-8")
+    assert "UserSecretsId" not in listing and not re.search(r"[A-Za-z]:[\\/]|\\\\", listing)
+    assert export_refs.logic_lines(listing) == []
+    dll = tmp_path / f"{kind}.dll"
+    dll.write_bytes(b"MZ ReferenceAssemblyAttribute")  # the real DLLs do not name InternalsVisibleToAttribute either
+    export_refs.check_friends(dll, listing, "App.AcceptanceTests", Path(f"src/{kind}/{kind}.csproj"))
+    out = export_refs.visible_members(export_refs.public_only(listing))
+    assert export_refs.hidden_lines(out) == []
+    for kept in EXE_KEPT[kind]:
+        assert kept in out, kept
+    for gone in EXE_GONE[kind]:
+        assert gone not in out, gone
+    if kind == "web":  # .NET 10+ Web SDK makes the top-level Program public; only its constructor is left
+        body = out[out.index("public class Program"):]
+        body = body[:body.index("\n}\n")]
+        assert re.findall(r"^\tpublic \w", body, re.M) == ["\tpublic P"]
+
+
 def test_export_refs_has_no_source_scan(export_refs):
     """S13-A04: the export no longer stops on the text InternalsVisibleTo alone."""
     source = (PAYLOAD / "scripts" / "export_refs.py").read_text(encoding="utf-8")

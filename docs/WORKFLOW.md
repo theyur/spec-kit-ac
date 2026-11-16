@@ -25,7 +25,9 @@ the test writer ever seeing the implementation?**
 - The main agent runs the AC tests. If tests fail, a third isolated subagent (`ac-test-fail-judge`),
   also blind to the implementation, classifies each failure.
 - AC tests target the core library API (the "AC surface", chosen at init), not hosts such as a CLI,
-  web API or UI. Hosts are thin wrappers and stay out of scope.
+  web API, worker or UI. Hosts are thin wrappers and stay out of scope. The exception is a product that
+  is one host project: init lists the `Exe` projects, the user may choose one by hand, and its public
+  API is then the surface (not its startup).
 
 Isolation is enforced **technically** — a fail-closed `PreToolUse` guard, subagent tool lists, fixed
 prompt templates, deterministic scripts as the only channel, content-hash change checks, subagents
