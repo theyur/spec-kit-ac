@@ -60,6 +60,10 @@ version and an `## [Unreleased]` section until the next release.
   tells the writer that the name exists. The same was already true of internal types.
 - A public type that implements an internal interface still names it, in its base list and in its explicit
   implementations (`void IInner.M()`). That holds with or without `InternalsVisibleTo`.
+- A DLL that mentions `InternalsVisibleToAttribute` without granting any friend fails the export with "shows no
+  friend line". This happens, for example, when a public API uses the attribute type. The check is a byte
+  search, not a metadata read, so it fails closed rather than trusting a listing that may have lost its friend
+  lines.
 
 ### Upgrade
 

@@ -272,9 +272,13 @@ def check_friends(dll, listing, ac_name, project):
         names = friends(listing)
     except ValueError as error:
         sys.exit(f"FAIL: cannot read a friend assembly line in the {dll.name} listing:\n  {error}")
+    # A plain byte search, not a metadata read: it also fires for a DLL that only mentions the attribute (a public
+    # API that uses the type, a description quoting it). That fails closed, by design (DESIGN, step 13 decision 4).
     if not names and b"InternalsVisibleToAttribute" in dll.read_bytes():
-        sys.exit(f"FAIL: {dll.name} has InternalsVisibleTo, but its listing shows no friend line; the friend check "
-                 "cannot run (did the ilspycmd output change?)")
+        sys.exit(f"FAIL: {dll.name} names InternalsVisibleToAttribute, but its listing shows no friend line, so the "
+                 "friend check cannot run. Either the ilspycmd output changed, or the assembly only mentions the "
+                 "attribute (a public API that uses the type, a description quoting it); the export cannot tell "
+                 "these apart and stops.")
     for name in names:
         if name.casefold() == ac_name.casefold():
             sys.exit(f"FAIL: {dll.name} grants InternalsVisibleTo to the AC assembly {ac_name}; the acceptance tests "

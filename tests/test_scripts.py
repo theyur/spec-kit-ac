@@ -1328,7 +1328,7 @@ def test_main_fails_on_an_unreadable_friend_line(export_refs, project, monkeypat
 def test_main_fails_when_the_dll_names_the_attribute_but_the_listing_shows_no_friend(export_refs, project, monkeypatch):
     message = export_fails(export_refs, project, monkeypatch,
                            dll="ReferenceAssemblyAttribute InternalsVisibleToAttribute")
-    assert message.startswith("FAIL: App.Core.dll has InternalsVisibleTo, but its listing shows no friend line")
+    assert message.startswith("FAIL: App.Core.dll names InternalsVisibleToAttribute, but its listing shows no friend line")
 
 
 def test_main_fails_when_a_hidden_word_is_left(export_refs, project, monkeypatch):
@@ -1372,7 +1372,7 @@ def test_main_reports_a_refs_folder_it_cannot_remove(export_refs, project, monke
     with pytest.raises(SystemExit) as error:
         export_refs.main()
     lines = str(error.value.code).splitlines()
-    assert lines[0].startswith("FAIL: App.Core.dll has InternalsVisibleTo")
+    assert lines[0].startswith("FAIL: App.Core.dll names InternalsVisibleToAttribute")
     assert lines[-1] == "Also: could not remove artifacts/refs (locked); delete it before the ref-mode build."
 
 
